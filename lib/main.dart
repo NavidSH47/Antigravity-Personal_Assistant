@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:shamsi_date/shamsi_date.dart';
 import 'models/task.dart';
 import 'models/shamsi_event.dart';
 import 'models/media_item.dart';
@@ -13,10 +12,14 @@ import 'services/media_ledger_cleanup_service.dart';
 import 'services/dual_calendar_service.dart';
 import 'services/media_label_service.dart';
 import 'services/media_goal_sync_service.dart';
+import 'services/cover_fetch_service.dart';
 import 'widgets/shamsi_agenda_banner.dart';
 import 'widgets/task_card.dart';
 import 'widgets/media_card.dart';
 import 'widgets/settings_drawer.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
+import 'services/title_case_service.dart';
+import 'widgets/safe_cover_image.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,7 +60,7 @@ class _NSHAssistantAppState extends State<NSHAssistantApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'NSH Assistant',
+      title: 'NSH Pulse',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.createTheme(_currentVibe, _currentFont),
       home: HomeScreen(
@@ -246,6 +249,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: noteController,
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: [TitleCaseTextInputFormatter()],
                       style: TextStyle(color: _palette.textMain),
                       decoration: InputDecoration(
                         labelText: 'Optional note (e.g. read chapter 4, watch with friends)',
@@ -408,6 +413,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: TextField(
                             controller: customTagController,
+                            textCapitalization: TextCapitalization.words,
+                            inputFormatters: [TitleCaseTextInputFormatter()],
                             style: TextStyle(color: _palette.textMain),
                             decoration: InputDecoration(
                               hintText: 'e.g. Masterpiece, RPG...',
@@ -422,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             onSubmitted: (val) {
                               if (val.trim().isNotEmpty) {
-                                addTag(val);
+                                addTag(toTitleCase(val.trim()));
                                 customTagController.clear();
                               }
                             },
@@ -436,7 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           onPressed: () {
                             if (customTagController.text.trim().isNotEmpty) {
-                              addTag(customTagController.text);
+                              addTag(toTitleCase(customTagController.text.trim()));
                               customTagController.clear();
                             }
                           },
@@ -513,6 +520,8 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Edit Media Notes'),
         content: TextField(
           controller: controller,
+          textCapitalization: TextCapitalization.words,
+          inputFormatters: [TitleCaseTextInputFormatter()],
           maxLines: 5,
           decoration: const InputDecoration(hintText: 'Enter notes'),
         ),
@@ -522,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            onPressed: () => Navigator.of(ctx).pop(toTitleCase(controller.text)),
             child: const Text('Save'),
           ),
         ],
@@ -543,6 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   String _currentTab = 'notes';
+  late PageController _pageController;
   String _mediaFilter = 'all';
   String _mediaSort = 'custom';
   bool _isMediaGrid = false;
@@ -553,6 +563,19 @@ class _HomeScreenState extends State<HomeScreen> {
   late List<MediaItem> _mediaItems;
 
   @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _removeShamsiEvent(ShamsiEvent event) {
+    setState(() {
+      _events.removeWhere((e) => e.id == event.id);
+    });
+    widget.storage.saveShamsiEvents(_events);
+  }
+
+  @override
   void initState() {
     super.initState();
     _selectedDate = Jalali.now();
@@ -560,6 +583,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _events = widget.storage.loadShamsiEvents();
     _mediaItems = widget.storage.loadMediaItems();
     _isMediaGrid = widget.storage.loadMediaViewMode() == 'grid';
+    _pageController = PageController(initialPage: _currentTab == 'notes' ? 0 : 1);
   }
 
   VibePalette get _palette =>
@@ -611,6 +635,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _assignTaskToToday(Task task) {
+    final isViewingToday = DateNavigationService.isToday(_selectedDate);
     setState(() {
       final index = _tasks.indexWhere((t) => t.id == task.id);
       if (index != -1) {
@@ -620,9 +645,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     widget.storage.saveTasks(_tasks);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Task moved to Today\'s Focus!'),
-        duration: Duration(seconds: 1),
+      SnackBar(
+        content: Text(
+          isViewingToday
+              ? 'Task scheduled for Today\'s Focus!'
+              : 'Task scheduled for ${DualCalendarService.toShamsiString(_selectedDate)}!',
+        ),
+        duration: const Duration(seconds: 1),
       ),
     );
   }
@@ -703,6 +732,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(color: _palette.textMuted, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showPersianDatePicker(
+                      context: context,
+                      initialDate: _selectedDate.addDays(1),
+                      firstDate: Jalali(1380, 1, 1),
+                      lastDate: Jalali(1450, 12, 29),
+                    );
+                    if (picked != null) {
+                      _postponeTaskToDate(task, picked);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _palette.accentPrimary.withValues(alpha: 0.15),
+                      border: Border.all(color: _palette.accentPrimary),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text('??? ', style: TextStyle(fontSize: 13)),
+                        Text(
+                          'Pick Custom Shamsi Date',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _palette.accentPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 ...List.generate(7, (i) {
                   final daysToAdd = i == 0
                       ? 1
@@ -839,6 +909,8 @@ class _HomeScreenState extends State<HomeScreen> {
               TextField(
                 controller: titleController,
                 autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                inputFormatters: [TitleCaseTextInputFormatter()],
                 style: TextStyle(color: _palette.textMain),
                 decoration: InputDecoration(
                   hintText: 'What needs to get done?',
@@ -854,6 +926,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 10),
               TextField(
                 controller: notesController,
+                textCapitalization: TextCapitalization.words,
+                inputFormatters: [TitleCaseTextInputFormatter()],
                 maxLines: 3,
                 style: TextStyle(color: _palette.textMain),
                 decoration: InputDecoration(
@@ -893,8 +967,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (title.isNotEmpty) {
                         final newTask = Task(
                           id: 'task_${DateTime.now().millisecondsSinceEpoch}',
-                          title: title,
-                          notes: notesController.text.trim(),
+                          title: toTitleCase(title),
+                          notes: toTitleCase(notesController.text.trim()),
                           category: category,
                           targetDateJalali: category == TaskCategory.daily
                               ? DateNavigationService.formatJalaliKey(_selectedDate)
@@ -947,12 +1021,106 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.storage.saveMediaItems(_mediaItems);
   }
 
+  void _removeMediaItem(String mediaId) {
+    final itemIndex = _mediaItems.indexWhere((m) => m.id == mediaId);
+    if (itemIndex == -1) return;
+
+    final removedItem = _mediaItems[itemIndex];
+    // Decouple linked tasks without removing task history
+    final affectedTaskIndices = <int>[];
+    for (int i = 0; i < _tasks.length; i++) {
+      if (_tasks[i].linkedMediaId == mediaId) {
+        affectedTaskIndices.add(i);
+      }
+    }
+
+    setState(() {
+      _mediaItems.removeAt(itemIndex);
+      for (final idx in affectedTaskIndices) {
+        _tasks[idx] = _tasks[idx].copyWith(clearLinkedMedia: true);
+      }
+    });
+
+    widget.storage.saveMediaItems(_mediaItems);
+    widget.storage.saveTasks(_tasks);
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Removed "${removedItem.title}" from library.'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Undo',
+          textColor: _palette.accentPrimary,
+          onPressed: () {
+            setState(() {
+              _mediaItems.insert(itemIndex, removedItem);
+              for (final idx in affectedTaskIndices) {
+                if (idx < _tasks.length) {
+                  _tasks[idx] = _tasks[idx].copyWith(
+                    linkedMediaId: removedItem.id,
+                    mediaTitle: removedItem.title,
+                  );
+                }
+              }
+            });
+            widget.storage.saveMediaItems(_mediaItems);
+            widget.storage.saveTasks(_tasks);
+          },
+        ),
+      ),
+    );
+  }
+
+  void _confirmRemoveMedia(MediaItem item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _palette.bgElevated,
+        title: Text(
+          'Remove Media Item',
+          style: TextStyle(
+            color: _palette.textMain,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to remove "${item.title}" from your library? Any ongoing daily goals linked to this item will remain as standalone tasks.',
+          style: TextStyle(color: _palette.textMuted, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: _palette.borderSubtle),
+              foregroundColor: _palette.textMuted,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _removeMediaItem(item.id);
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showUpdateProgressDialog(MediaItem item) {
     final currentController =
         TextEditingController(text: item.progressCurrent.toInt().toString());
     final totalController =
         TextEditingController(text: item.progressTotal.toInt().toString());
     double selectedScore = item.score ?? 8.0;
+    String? validationError;
 
     showDialog(
       context: context,
@@ -997,6 +1165,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
+                          onChanged: (_) {
+                            if (validationError != null) {
+                              setDState(() => validationError = null);
+                            }
+                          },
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1014,10 +1187,42 @@ class _HomeScreenState extends State<HomeScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
+                          onChanged: (_) {
+                            if (validationError != null) {
+                              setDState(() => validationError = null);
+                            }
+                          },
                         ),
                       ),
                     ],
                   ),
+                  if (validationError != null) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0x26EF4444),
+                        border: Border.all(color: const Color(0xFFEF4444)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, size: 16, color: Color(0xFFEF4444)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              validationError!,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFFEF4444),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1064,16 +1269,30 @@ class _HomeScreenState extends State<HomeScreen> {
                     foregroundColor: Colors.black,
                   ),
                   onPressed: () {
-                    final cur =
-                        double.tryParse(currentController.text) ?? item.progressCurrent;
-                    final tot =
-                        double.tryParse(totalController.text) ?? item.progressTotal;
+                    final curParsed = double.tryParse(currentController.text.trim());
+                    final totParsed = double.tryParse(totalController.text.trim());
+
+                    if (curParsed == null || curParsed < 0) {
+                      setDState(() => validationError = 'Current progress must be a non-negative number.');
+                      return;
+                    }
+                    if (totParsed == null || totParsed <= 0) {
+                      setDState(() => validationError = 'Total capacity must be greater than 0.');
+                      return;
+                    }
+                    if (curParsed > totParsed) {
+                      final cStr = MediaGoalSyncService.formatUnits(curParsed);
+                      final tStr = MediaGoalSyncService.formatUnits(totParsed);
+                      setDState(() => validationError = 'Progress ($cStr) cannot exceed capacity ($tStr)!');
+                      return;
+                    }
+
                     setState(() {
                       final index = _mediaItems.indexWhere((m) => m.id == item.id);
                       if (index != -1) {
                         _mediaItems[index] = item.copyWith(
-                          progressCurrent: cur,
-                          progressTotal: tot,
+                          progressCurrent: curParsed,
+                          progressTotal: totParsed,
                           score: selectedScore,
                         );
                       }
@@ -1093,87 +1312,248 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showEditCoverDialog(MediaItem item) {
     final urlController = TextEditingController(text: item.coverUrl ?? '');
+    bool isSearchingCovers = false;
+    List<CoverSearchResult> candidates = [];
+    String? searchMsg;
 
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: _palette.bgElevated,
-          title: Text(
-            'Cover Art: ${item.title}',
-            style: TextStyle(
-              color: _palette.textMain,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: urlController,
-                style: TextStyle(color: _palette.textMain),
-                decoration: InputDecoration(
-                  labelText: 'Image Web URL',
-                  hintText: 'https://...',
-                  labelStyle: TextStyle(color: _palette.textMuted),
-                  filled: true,
-                  fillColor: _palette.bgSurface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+        return StatefulBuilder(
+          builder: (dCtx, setDState) {
+            return AlertDialog(
+              backgroundColor: _palette.bgElevated,
+              title: Text(
+                'Cover Art: ${item.title}',
+                style: TextStyle(
+                  color: _palette.textMain,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: urlController,
+                      style: TextStyle(color: _palette.textMain),
+                      decoration: InputDecoration(
+                        labelText: 'Image Web URL',
+                        hintText: 'https://...',
+                        labelStyle: TextStyle(color: _palette.textMuted),
+                        filled: true,
+                        fillColor: _palette.bgSurface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onChanged: (_) => setDState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      icon: isSearchingCovers
+                          ? const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.black,
+                              ),
+                            )
+                          : const Icon(Icons.search, size: 14),
+                      label: const Text('🔍 Auto-Fetch Cover'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _palette.accentPrimary,
+                        foregroundColor: Colors.black,
+                        elevation: 0,
+                      ),
+                      onPressed: isSearchingCovers
+                          ? null
+                          : () async {
+                              setDState(() {
+                                isSearchingCovers = true;
+                                searchMsg = null;
+                              });
+                              final results =
+                                  await CoverFetchService.searchCovers(
+                                query: item.title,
+                                type: item.type,
+                              );
+                              setDState(() {
+                                isSearchingCovers = false;
+                                candidates = results;
+                                if (results.isEmpty) {
+                                  searchMsg =
+                                      'No covers found for "${item.title}".';
+                                }
+                              });
+                            },
+                    ),
+                    if (searchMsg != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        searchMsg!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _palette.textMuted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                    if (candidates.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 85,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: candidates.length,
+                          separatorBuilder: (context, index) => const SizedBox(width: 8),
+                          itemBuilder: (context, idx) {
+                            final c = candidates[idx];
+                            final isSelected =
+                                urlController.text == c.coverUrl;
+                            return InkWell(
+                              onTap: () {
+                                urlController.text = c.coverUrl;
+                                setDState(() {});
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 58,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? _palette.accentPrimary
+                                        : _palette.borderSubtle,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    SafeCoverImage(
+                                      url: c.coverUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const Center(
+                                        child:
+                                            Icon(Icons.broken_image, size: 16),
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.green,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.check,
+                                            size: 10,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                    if (urlController.text.trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Center(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SizedBox(
+                            width: 75,
+                            height: 100,
+                            child: SafeCoverImage(
+                              url: urlController.text.trim(),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const Center(
+                                child: Icon(Icons.broken_image, size: 24),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.delete_outline, size: 16),
+                      label: const Text('Remove Cover (Use Placeholder)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _palette.bgSurface,
+                        foregroundColor: const Color(0xFFEF4444),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          final index =
+                              _mediaItems.indexWhere((m) => m.id == item.id);
+                          if (index != -1) {
+                            _mediaItems[index] = item.copyWith(coverUrl: '');
+                          }
+                        });
+                        widget.storage.saveMediaItems(_mediaItems);
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.delete_forever, size: 16),
+                      label: const Text('🗑️ Remove Media'),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0x66EF4444)),
+                        foregroundColor: const Color(0xFFEF4444),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _confirmRemoveMedia(item);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: _palette.textMuted),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('Remove Cover (Use Placeholder)'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _palette.bgSurface,
-                  foregroundColor: const Color(0xFFEF4444),
-                  elevation: 0,
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _palette.accentPrimary,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    final url = SafeCoverImage.sanitizeUrl(urlController.text);
+                    setState(() {
+                      final index =
+                          _mediaItems.indexWhere((m) => m.id == item.id);
+                      if (index != -1) {
+                        _mediaItems[index] = item.copyWith(coverUrl: url);
+                      }
+                    });
+                    widget.storage.saveMediaItems(_mediaItems);
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Update'),
                 ),
-                onPressed: () {
-                  setState(() {
-                    final index = _mediaItems.indexWhere((m) => m.id == item.id);
-                    if (index != -1) {
-                      _mediaItems[index] = item.copyWith(coverUrl: '');
-                    }
-                  });
-                  widget.storage.saveMediaItems(_mediaItems);
-                  Navigator.pop(ctx);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: _palette.textMuted),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _palette.accentPrimary,
-                foregroundColor: Colors.black,
-              ),
-              onPressed: () {
-                final url = urlController.text.trim();
-                setState(() {
-                  final index = _mediaItems.indexWhere((m) => m.id == item.id);
-                  if (index != -1) {
-                    _mediaItems[index] = item.copyWith(coverUrl: url);
-                  }
-                });
-                widget.storage.saveMediaItems(_mediaItems);
-                Navigator.pop(ctx);
-              },
-              child: const Text('Update'),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -1185,8 +1565,12 @@ class _HomeScreenState extends State<HomeScreen> {
         TextEditingController(text: DateTime.now().year.toString());
     final totalController = TextEditingController(text: '100');
     final tagInputController = TextEditingController();
+    final coverUrlController = TextEditingController();
     MediaType selectedType = MediaType.book;
     List<String> selectedLabels = [];
+    bool isSearchingCovers = false;
+    List<CoverSearchResult> candidates = [];
+    String? coverSearchMsg;
 
     showDialog(
       context: context,
@@ -1248,6 +1632,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 10),
                     TextField(
                       controller: titleController,
+                      textCapitalization: TextCapitalization.words,
+                      inputFormatters: [TitleCaseTextInputFormatter()],
                       style: TextStyle(color: _palette.textMain),
                       decoration: InputDecoration(
                         labelText: 'Title',
@@ -1368,6 +1754,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         Expanded(
                           child: TextField(
                             controller: tagInputController,
+                            textCapitalization: TextCapitalization.words,
+                            inputFormatters: [TitleCaseTextInputFormatter()],
                             style: TextStyle(color: _palette.textMain),
                             decoration: InputDecoration(
                               hintText: '+ Add Custom Tag',
@@ -1383,7 +1771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             onSubmitted: (val) {
                               if (val.trim().isNotEmpty) {
                                 setDState(() {
-                                  selectedLabels = MediaLabelService.addLabel(selectedLabels, val);
+                                  selectedLabels = MediaLabelService.addLabel(selectedLabels, toTitleCase(val.trim()));
                                 });
                                 tagInputController.clear();
                               }
@@ -1413,6 +1801,179 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Cover Art:',
+                      style: TextStyle(
+                        color: _palette.textMain,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: coverUrlController,
+                            style: TextStyle(color: _palette.textMain),
+                            decoration: InputDecoration(
+                              hintText: 'Image URL (https://...)',
+                              hintStyle: TextStyle(color: _palette.textDim),
+                              filled: true,
+                              fillColor: _palette.bgSurface,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onChanged: (_) => setDState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          icon: isSearchingCovers
+                              ? const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.black,
+                                  ),
+                                )
+                              : const Icon(Icons.search, size: 14),
+                          label: const Text('🔍 Auto-Fetch', style: TextStyle(fontSize: 11)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _palette.accentPrimary,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            elevation: 0,
+                          ),
+                          onPressed: isSearchingCovers
+                              ? null
+                              : () async {
+                                  final query = titleController.text.trim();
+                                  if (query.isEmpty) {
+                                    setDState(() => coverSearchMsg = 'Enter title first!');
+                                    return;
+                                  }
+                                  setDState(() {
+                                    isSearchingCovers = true;
+                                    coverSearchMsg = null;
+                                  });
+                                  final results = await CoverFetchService.searchCovers(
+                                    query: query,
+                                    type: selectedType,
+                                  );
+                                  setDState(() {
+                                    isSearchingCovers = false;
+                                    candidates = results;
+                                    if (results.isEmpty) {
+                                      coverSearchMsg = 'No covers found for "$query".';
+                                    }
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                    if (coverSearchMsg != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        coverSearchMsg!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _palette.textMuted,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                    if (candidates.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 85,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: candidates.length,
+                          separatorBuilder: (context, index) => const SizedBox(width: 8),
+                          itemBuilder: (context, idx) {
+                            final c = candidates[idx];
+                            final isSelected = coverUrlController.text == c.coverUrl;
+                            return InkWell(
+                              onTap: () {
+                                coverUrlController.text = c.coverUrl;
+                                setDState(() {});
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: 58,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected ? _palette.accentPrimary : _palette.borderSubtle,
+                                    width: isSelected ? 2 : 1,
+                                  ),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    SafeCoverImage(
+                                      url: c.coverUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const Center(
+                                        child: Icon(Icons.broken_image, size: 16),
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      Positioned(
+                                        top: 2,
+                                        right: 2,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.green,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.check, size: 10, color: Colors.white),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                    if (coverUrlController.text.trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: SizedBox(
+                              width: 36,
+                              height: 48,
+                              child: SafeCoverImage(
+                                url: coverUrlController.text.trim(),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 24),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Cover selected',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _palette.accentPrimary,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1430,16 +1991,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     foregroundColor: Colors.black,
                   ),
                   onPressed: () {
-                    final title = titleController.text.trim();
+                    final title = toTitleCase(titleController.text.trim());
                     if (title.isNotEmpty) {
                       final year = int.tryParse(yearController.text) ?? 2024;
                       final total = double.tryParse(totalController.text) ?? 100;
+                      final cover = coverUrlController.text.trim().isEmpty
+                          ? null
+                          : SafeCoverImage.sanitizeUrl(coverUrlController.text);
                       final newItem = MediaItem(
                         id: 'media_${DateTime.now().millisecondsSinceEpoch}',
                         type: selectedType,
                         title: title,
                         releaseYear: year,
                         labels: selectedLabels,
+                        coverUrl: cover,
                         progressCurrent: 0,
                         progressTotal: total,
                       );
@@ -1527,18 +2092,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      ShaderMask(
-                        shaderCallback: (bounds) =>
-                            _palette.accentGradient.createShader(bounds),
-                        child: const Text(
-                          '⚡ NSH Assistant',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.3,
-                            color: Colors.white,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _palette.borderFocus.withValues(alpha: 0.6),
+                                width: 1.5,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(6.5),
+                              child: Image.asset(
+                                'Logo.jpeg',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Icon(
+                                  Icons.bolt,
+                                  size: 18,
+                                  color: _palette.accentPrimary,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 8),
+                          ShaderMask(
+                            shaderCallback: (bounds) =>
+                                _palette.accentGradient.createShader(bounds),
+                            child: const Text(
+                              'NSH Pulse',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -0.3,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       InkWell(
                         onTap: () => _scaffoldKey.currentState?.openEndDrawer(),
@@ -1590,15 +2184,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: _buildSegmentButton(
                             label: '📝 Daily Pulse',
                             isActive: _currentTab == 'notes',
-                            onTap: () => setState(() => _currentTab = 'notes'),
+                            onTap: () { setState(() => _currentTab = 'notes'); if (_pageController.hasClients) { _pageController.animateToPage(0, duration: const Duration(milliseconds: 250), curve: Curves.easeInOut); } },
                           ),
                         ),
                         Expanded(
                           child: _buildSegmentButton(
                             label: '🎬 Entertainment',
                             isActive: _currentTab == 'entertainment',
-                            onTap: () =>
-                                setState(() => _currentTab = 'entertainment'),
+                            onTap: () { setState(() => _currentTab = 'entertainment'); if (_pageController.hasClients) { _pageController.animateToPage(1, duration: const Duration(milliseconds: 250), curve: Curves.easeInOut); } },
                           ),
                         ),
                       ],
@@ -1608,9 +2201,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Expanded(
-              child: _currentTab == 'notes'
-                  ? _buildDailyPulseView()
-                  : _buildEntertainmentView(),
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentTab = index == 0 ? 'notes' : 'entertainment';
+                  });
+                },
+                physics: const ClampingScrollPhysics(),
+                children: [
+                  _buildDailyPulseView(),
+                  _buildEntertainmentView(),
+                ],
+              ),
             ),
           ],
         ),
@@ -1672,46 +2275,54 @@ class _HomeScreenState extends State<HomeScreen> {
           onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
           onToggleCheckpoint: _toggleShamsiCheckpoint,
           onAddEvent: _addShamsiEvent,
+          onRemoveEvent: _removeShamsiEvent,
         ),
         const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Text(
-                  isViewingToday
-                      ? '📌 Today\'s Focus'
-                      : '📌 Focus for ${DualCalendarService.toShamsiString(_selectedDate)}',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _palette.textMain,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _palette.bgElevated,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${daily.length}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: _palette.textMuted,
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      isViewingToday
+                          ? '📌 Today\'s Focus'
+                          : '📌 Focus for ${DualCalendarService.toShamsiString(_selectedDate)}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _palette.textMain,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _palette.bgElevated,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${daily.length}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: _palette.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 8),
             InkWell(
               onTap: () => _openAddTaskModal(TaskCategory.daily),
               child: Text(
-                isViewingToday ? '+ Add for Today' : '+ Add for This Day',
+                isViewingToday ? '+ Add' : '+ Add to Day',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -1861,6 +2472,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 dragIndex: index,
                 onStatusChange: (status) => _setTaskStatus(task, status),
                 onAssignToToday: () => _assignTaskToToday(task),
+                onScheduleForDate: () => _assignTaskToToday(task),
+                scheduleLabel:
+                    isViewingToday ? '⚡ Assign Today' : '📅 Assign to Day',
                 onDelete: () => _deleteTask(task),
               );
             },
@@ -2059,33 +2673,35 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (context, index) {
               final item = mediaList[index];
               return MediaCard(
-                              key: ValueKey(item.id),
-                              item: item,
-                              palette: _palette,
-                              isGrid: true,
-                              onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
-                              onUpdateProgress: () => _showUpdateProgressDialog(item),
-                              onEditCover: () => _showEditCoverDialog(item),
-                              onScheduleToday: () => _scheduleMediaToday(item),
-                              onEditNotes: () => _editMediaNotes(item),
-                              onEditLabels: () => _showEditLabelsDialog(item),
-                            );
+                key: ValueKey(item.id),
+                item: item,
+                palette: _palette,
+                isGrid: true,
+                onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
+                onUpdateProgress: () => _showUpdateProgressDialog(item),
+                onEditCover: () => _showEditCoverDialog(item),
+                onScheduleToday: () => _scheduleMediaToday(item),
+                onEditNotes: () => _editMediaNotes(item),
+                onEditLabels: () => _showEditLabelsDialog(item),
+                onDelete: () => _removeMediaItem(item.id),
+              );
             },
           )
         else
           ...mediaList.map((item) {
             return MediaCard(
-                          key: ValueKey(item.id),
-                          item: item,
-                          palette: _palette,
-                          isGrid: false,
-                          onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
-                          onUpdateProgress: () => _showUpdateProgressDialog(item),
-                          onEditCover: () => _showEditCoverDialog(item),
-                          onScheduleToday: () => _scheduleMediaToday(item),
-                          onEditNotes: () => _editMediaNotes(item),
-                          onEditLabels: () => _showEditLabelsDialog(item),
-                        );
+              key: ValueKey(item.id),
+              item: item,
+              palette: _palette,
+              isGrid: false,
+              onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
+              onUpdateProgress: () => _showUpdateProgressDialog(item),
+              onEditCover: () => _showEditCoverDialog(item),
+              onScheduleToday: () => _scheduleMediaToday(item),
+              onEditNotes: () => _editMediaNotes(item),
+              onEditLabels: () => _showEditLabelsDialog(item),
+              onDelete: () => _removeMediaItem(item.id),
+            );
           }),
       ],
     );

@@ -43,6 +43,17 @@ class DateNavigationService {
     return current.addDays(days);
   }
 
+  /// Shifts a date by a given number of months forward or backward.
+  static Jalali shiftMonths(Jalali current, int months) {
+    if (months == 0) return current;
+    final totalMonths = current.year * 12 + (current.month - 1) + months;
+    final newYear = totalMonths ~/ 12;
+    final newMonth = (totalMonths % 12) + 1;
+    final maxDays = Jalali(newYear, newMonth, 1).monthLength;
+    final newDay = current.day > maxDays ? maxDays : current.day;
+    return Jalali(newYear, newMonth, newDay);
+  }
+
   /// Filters tasks belonging to a specific Jalali date.
   /// If a daily task has no targetDateJalali, it belongs to today.
   static List<Task> getTasksForDate(List<Task> allTasks, Jalali date) {

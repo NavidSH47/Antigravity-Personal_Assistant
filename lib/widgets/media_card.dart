@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/media_item.dart';
 import '../theme/app_theme.dart';
+import 'safe_cover_image.dart';
 
 class MediaCard extends StatelessWidget {
   final MediaItem item;
@@ -36,7 +37,7 @@ class MediaCard extends StatelessWidget {
     return _buildListCard(context);
   }
 
-  // --- LIST VIEW CARD (Horizontal) ---
+  // --- LIST VIEW CARD (Separated Top & Bottom Layout) ---
   Widget _buildListCard(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -51,23 +52,25 @@ class MediaCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // TOP SECTION: Cover on left, Title & Year & Delete & Labels on right
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Cover Box
-              _buildCoverBox(width: 74, height: 104),
+              // Cover Box (4:3 aspect ratio: 75x100 = 3:4 portrait poster, cropped not stretched)
+              _buildCoverBox(width: 75, height: 100),
               const SizedBox(width: 12),
 
-              // Details
+              // Title, Year, Delete, and Labels
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Title & Year
+                    // Title & Year & Delete
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Text(
@@ -77,10 +80,11 @@ class MediaCard extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                               color: palette.textMain,
                             ),
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 6),
                         Text(
                           '${item.releaseYear}',
                           style: TextStyle(
@@ -89,22 +93,37 @@ class MediaCard extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        if (onDelete != null) ...[
+                          const SizedBox(width: 6),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            color: palette.textDim,
+                            hoverColor: const Color(0x33EF4444),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Remove Media',
+                            onPressed: () => _confirmDelete(context),
+                          ),
+                        ],
                       ],
                     ),
 
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
+
+                    // Labels
                     InkWell(
                       onTap: onEditLabels,
+                      borderRadius: BorderRadius.circular(4),
                       child: item.labels.isNotEmpty
                           ? Wrap(
                               spacing: 4,
-                              runSpacing: 2,
+                              runSpacing: 3,
                               children: [
                                 ...item.labels.map((l) {
                                   return Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 6,
-                                      vertical: 1,
+                                      vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
                                       color: Colors.white.withValues(alpha: 0.06),
@@ -123,8 +142,8 @@ class MediaCard extends StatelessWidget {
                                 }),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 1,
+                                    horizontal: 5,
+                                    vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
                                     border: Border.all(color: palette.borderSubtle),
@@ -153,163 +172,167 @@ class MediaCard extends StatelessWidget {
                               ),
                             ),
                     ),
+                  ],
+                ),
+              ),
+            ],
+          ),
 
-                    const SizedBox(height: 4),
+          const SizedBox(height: 10),
 
-                    // Personal Note
-                    InkWell(
-                      onTap: onEditNotes,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          border: Border(
-                            left: BorderSide(
-                              color: palette.accentPrimary,
-                              width: 2,
-                            ),
-                          ),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: Text(
-                          item.personalNotes != null &&
-                                  item.personalNotes!.isNotEmpty
-                              ? '📝 "${item.personalNotes}"'
-                              : '📝 + Add personal description/notes...',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: item.personalNotes != null &&
-                                    item.personalNotes!.isNotEmpty
-                                ? palette.textMuted
-                                : palette.textDim,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+          // UNDER COVER: Description Box (Personal Notes)
+          InkWell(
+            onTap: onEditNotes,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.2),
+                border: Border(
+                  left: BorderSide(
+                    color: palette.accentPrimary,
+                    width: 3,
+                  ),
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                item.personalNotes != null &&
+                        item.personalNotes!.isNotEmpty
+                    ? '📝 "${item.personalNotes}"'
+                    : '📝 + Add personal description/notes...',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                  color: item.personalNotes != null &&
+                          item.personalNotes!.isNotEmpty
+                      ? palette.textMuted
+                      : palette.textDim,
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // UNDER COVER: Score Badge & Progress Section
+          Row(
+            children: [
+              _buildScoreBadge(),
+              const SizedBox(width: 10),
+              Expanded(child: _buildProgressSection()),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // UNDER COVER: Foot Action Buttons Box (Schedule + Hold + Update)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              InkWell(
+                onTap: onScheduleToday,
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: palette.borderSubtle),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 11,
+                        color: palette.accentPrimary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Schedule Today',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: palette.accentPrimary,
                         ),
                       ),
-                    ),
-
-                    const SizedBox(height: 6),
-
-                    // Score Badge
-                    _buildScoreBadge(),
-
-                    const SizedBox(height: 8),
-
-                    // Progress Section
-                    _buildProgressSection(),
-
-                    const SizedBox(height: 8),
-
-                    // Foot Actions: Schedule Today + On-hold + Update Progress
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    ],
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => onToggleOnHold(!item.isOnHold),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        InkWell(
-                          onTap: onScheduleToday,
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: palette.borderSubtle),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.calendar_today,
-                                  size: 11,
-                                  color: palette.accentPrimary,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Schedule Today',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: palette.accentPrimary,
-                                  ),
-                                ),
-                              ],
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: Checkbox(
+                            value: item.isOnHold,
+                            onChanged: (val) =>
+                                onToggleOnHold(val ?? false),
+                            activeColor: const Color(0xFFF59E0B),
+                            side: BorderSide(
+                              color: palette.textDim,
+                              width: 1.5,
                             ),
                           ),
                         ),
-                        Row(
-                          children: [
-                            InkWell(
-                              onTap: () => onToggleOnHold(!item.isOnHold),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: Checkbox(
-                                      value: item.isOnHold,
-                                      onChanged: (val) =>
-                                          onToggleOnHold(val ?? false),
-                                      activeColor: const Color(0xFFF59E0B),
-                                      side: BorderSide(
-                                        color: palette.textDim,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Hold',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: item.isOnHold
-                                          ? const Color(0xFFFBBF24)
-                                          : palette.textDim,
-                                      fontWeight: item.isOnHold
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            InkWell(
-                              onTap: onUpdateProgress,
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: palette.bgSurface,
-                                  border:
-                                      Border.all(color: palette.borderSubtle),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '+ Update',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: palette.accentPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(width: 4),
+                        Text(
+                          'Hold',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: item.isOnHold
+                                ? const Color(0xFFFBBF24)
+                                : palette.textDim,
+                            fontWeight: item.isOnHold
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: onUpdateProgress,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.bgSurface,
+                        border:
+                            Border.all(color: palette.borderSubtle),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '+ Update',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: palette.accentPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -336,7 +359,37 @@ class MediaCard extends StatelessWidget {
         children: [
           // Poster Cover Box on top
           Expanded(
-            child: _buildCoverBox(width: double.infinity, height: double.infinity),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _buildCoverBox(
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                ),
+                if (onDelete != null)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: InkWell(
+                      onTap: () => _confirmDelete(context),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 8),
@@ -495,8 +548,8 @@ class MediaCard extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           if (item.coverUrl != null && item.coverUrl!.isNotEmpty)
-            Image.network(
-              item.coverUrl!,
+            SafeCoverImage(
+              url: item.coverUrl!,
               fit: BoxFit.cover,
               cacheWidth: 300,
               cacheHeight: 450,
@@ -612,6 +665,49 @@ class MediaCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  void _confirmDelete(BuildContext context) {
+    if (onDelete == null) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: palette.bgElevated,
+        title: Text(
+          'Remove Media Item',
+          style: TextStyle(
+            color: palette.textMain,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to remove "${item.title}" from your library? Any ongoing daily goals linked to this item will remain as standalone tasks.',
+          style: TextStyle(color: palette.textMuted, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: palette.borderSubtle),
+              foregroundColor: palette.textMuted,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              onDelete!();
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
     );
   }
 }

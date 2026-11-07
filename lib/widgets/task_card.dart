@@ -7,6 +7,8 @@ class TaskCard extends StatelessWidget {
   final VibePalette palette;
   final Function(TaskStatus) onStatusChange;
   final VoidCallback? onAssignToToday;
+  final VoidCallback? onScheduleForDate;
+  final String? scheduleLabel;
   final VoidCallback? onDemoteToBacklog;
   final VoidCallback? onPostponeOneDay;
   final VoidCallback? onPostponeToDate;
@@ -20,6 +22,8 @@ class TaskCard extends StatelessWidget {
     required this.palette,
     required this.onStatusChange,
     this.onAssignToToday,
+    this.onScheduleForDate,
+    this.scheduleLabel,
     this.onDemoteToBacklog,
     this.onPostponeOneDay,
     this.onPostponeToDate,
@@ -206,10 +210,9 @@ class TaskCard extends StatelessWidget {
                               onStatusChange(TaskStatus.postponed);
                             }
                           },
-                          onLongPress: onPostponeToDate,
                           borderRadius: BorderRadius.circular(6),
                           child: Tooltip(
-                            message: 'Tap: Postpone +1 Day | Hold: Pick Future Date',
+                            message: 'Postpone task to tomorrow (+1 day)',
                             child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
@@ -249,10 +252,10 @@ class TaskCard extends StatelessWidget {
                   ),
                 ),
 
-                // Right side: Assign to Today or Demote to Backlog or Badge
-                if (task.category == TaskCategory.general && onAssignToToday != null)
+                // Right side: Schedule / Assign or Demote to Backlog or Badge
+                if (task.category == TaskCategory.general && (onScheduleForDate != null || onAssignToToday != null))
                   InkWell(
-                    onTap: onAssignToToday,
+                    onTap: onScheduleForDate ?? onAssignToToday,
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -273,7 +276,7 @@ class TaskCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            'Assign Today',
+                            scheduleLabel ?? '⚡ Schedule',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -321,28 +324,26 @@ class TaskCard extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        task.linkedMediaId != null
-                            ? '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check'
-                            : (task.status == TaskStatus.postponed
-                                ? 'Postponed (${task.postponedCount}x)'
-                                : 'Due Today'),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: task.linkedMediaId != null ? FontWeight.bold : FontWeight.normal,
-                          color: task.linkedMediaId != null ? palette.accentPrimary : palette.textDim,
+                      if (task.linkedMediaId != null || task.status == TaskStatus.postponed) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          task.linkedMediaId != null
+                              ? '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check'
+                              : 'Postponed (${task.postponedCount}x)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: task.linkedMediaId != null ? FontWeight.bold : FontWeight.normal,
+                            color: task.linkedMediaId != null ? palette.accentPrimary : palette.textDim,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   )
-                else
+                else if (task.linkedMediaId != null || task.status == TaskStatus.postponed)
                   Text(
                     task.linkedMediaId != null
                         ? '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check'
-                        : (task.status == TaskStatus.postponed
-                            ? 'Postponed (${task.postponedCount}x)'
-                            : 'Due Today'),
+                        : 'Postponed (${task.postponedCount}x)',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: task.linkedMediaId != null ? FontWeight.bold : FontWeight.normal,

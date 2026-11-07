@@ -1,5 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shamsi_date/shamsi_date.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'dart:convert';
 import 'package:nsh_assistant/models/task.dart';
 import 'package:nsh_assistant/models/media_item.dart';
 import 'package:nsh_assistant/models/shamsi_event.dart';
@@ -12,7 +16,13 @@ import 'package:nsh_assistant/services/dual_calendar_service.dart';
 import 'package:nsh_assistant/services/web_typography_service.dart';
 import 'package:nsh_assistant/services/media_label_service.dart';
 import 'package:nsh_assistant/services/media_goal_sync_service.dart';
+import 'package:nsh_assistant/services/cover_fetch_service.dart';
+import 'package:nsh_assistant/widgets/task_card.dart';
 import 'package:nsh_assistant/theme/app_theme.dart';
+import 'package:nsh_assistant/services/title_case_service.dart';
+import 'package:nsh_assistant/widgets/safe_cover_image.dart';
+import 'package:nsh_assistant/widgets/shamsi_agenda_banner.dart';
+import 'package:nsh_assistant/widgets/media_card.dart';
 
 void main() {
   group('Task Model & 3-State Transitions', () {
@@ -108,6 +118,17 @@ void main() {
       final nowruz = events.firstWhere((e) => e.jalaliMonth == 1 && e.jalaliDay == 1);
       expect(nowruz.isOfficialHoliday, true);
       expect(nowruz.title.contains('نوروز'), true);
+
+      // Verify World Diabetes Day (23rd Aban) and International Men's Day (28th Aban)
+      final diabetesDay = events.firstWhere(
+        (e) => e.jalaliMonth == 8 && e.jalaliDay == 23 && e.title.contains('دیابت'),
+      );
+      expect(diabetesDay.title.contains('World Diabetes Day'), true);
+
+      final mensDay = events.firstWhere(
+        (e) => e.jalaliMonth == 8 && e.jalaliDay == 28 && e.title.contains('مرد'),
+      );
+      expect(mensDay.title.contains('International Men\'s Day'), true);
     });
 
     test('Action checkpoint toggling works as intended', () {
@@ -323,6 +344,7 @@ void main() {
       expect(WebTypographyService.configuredWebFonts, contains('Comic Neue'));
       expect(WebTypographyService.configuredWebFonts, contains('Quicksand'));
       expect(WebTypographyService.configuredWebFonts, contains('Fira Code'));
+      expect(WebTypographyService.configuredWebFonts, contains('Lora'));
     });
 
     test('Google Fonts CSS URL contains all web font families', () {
@@ -331,6 +353,7 @@ void main() {
       expect(url.contains('Comic+Neue'), true);
       expect(url.contains('Quicksand'), true);
       expect(url.contains('Fira+Code'), true);
+      expect(url.contains('Lora'), true);
     });
 
     test('verifyFontResolution returns true for all AppFontStyle variants', () {
@@ -534,6 +557,565 @@ void main() {
 
       final celebration = MediaGoalSyncService.celebrationMessage(item);
       expect(celebration.contains('🎉 Progress updated: Klara and the Sun is now at 172/303 Pages'), true);
+    });
+  });
+
+  group('10. CoverFetchService (Milestone 5)', () {
+    test('Open Library book search parses valid JSON into CoverSearchResult', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'openlibrary.org') {
+          return http.Response(
+            jsonEncode({
+              'docs': [
+                {
+                  'title': 'Dune',
+                  'cover_i': 12345,
+                  'first_publish_year': 1965,
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final results = await CoverFetchService.searchCovers(
+        query: 'Dune',
+        type: MediaType.book,
+        client: mockClient,
+      );
+
+      expect(results.length, 1);
+      expect(results.first.title, 'Dune');
+      expect(results.first.coverUrl, 'https://covers.openlibrary.org/b/id/12345-L.jpg');
+      expect(results.first.source, 'Open Library');
+      expect(results.first.year, '1965');
+    });
+
+    test('TVMaze show search parses valid JSON into CoverSearchResult', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'api.tvmaze.com') {
+          return http.Response(
+            jsonEncode([
+              {
+                'show': {
+                  'name': 'Succession',
+                  'premiered': '2018-06-03',
+                  'image': {
+                    'original': 'https://static.tvmaze.com/uploads/images/original_untouched/123.jpg'
+                  }
+                }
+              }
+            ]),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final results = await CoverFetchService.searchCovers(
+        query: 'Succession',
+        type: MediaType.tvShow,
+        client: mockClient,
+      );
+
+      expect(results.length, 1);
+      expect(results.first.title, 'Succession');
+      expect(results.first.source, 'TVMaze');
+      expect(results.first.year, '2018');
+      expect(results.first.coverUrl.contains('static.tvmaze.com'), true);
+    });
+
+    test('iTunes movie search parses valid JSON with high-res replacement', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'itunes.apple.com') {
+          return http.Response(
+            jsonEncode({
+              'results': [
+                {
+                  'trackName': 'Oppenheimer',
+                  'releaseDate': '2023-07-21T07:00:00Z',
+                  'artworkUrl100': 'https://is1-ssl.mzstatic.com/image/thumb/100x100bb.jpg',
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final results = await CoverFetchService.searchCovers(
+        query: 'Oppenheimer',
+        type: MediaType.movie,
+        client: mockClient,
+      );
+
+      expect(results.length, 1);
+      expect(results.first.title, 'Oppenheimer');
+      expect(results.first.source, 'iTunes');
+      expect(results.first.year, '2023');
+      expect(results.first.coverUrl.contains('600x600bb.jpg'), true);
+    });
+
+    test('Steam game search parses valid JSON with vertical poster', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'store.steampowered.com') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'id': 1245620,
+                  'name': 'Elden Ring',
+                  'tiny_image': 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1245620/capsule_sm_120.jpg',
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final results = await CoverFetchService.searchCovers(
+        query: 'Elden Ring',
+        type: MediaType.videoGame,
+        client: mockClient,
+      );
+
+      expect(results.length, 1);
+      expect(results.first.title, 'Elden Ring');
+      expect(results.first.source, 'Steam');
+      expect(results.first.coverUrl.contains('1245620/library_600x900_2x.jpg'), true);
+    });
+
+    test('Empty query and network error return empty list safely', () async {
+      final emptyResults = await CoverFetchService.searchCovers(
+        query: '   ',
+        type: MediaType.book,
+      );
+      expect(emptyResults, isEmpty);
+
+      final errorClient = MockClient((request) async {
+        throw Exception('Connection failed');
+      });
+
+      final errorResults = await CoverFetchService.searchCovers(
+        query: 'NonExistentTitle',
+        type: MediaType.book,
+        client: errorClient,
+      );
+      expect(errorResults, isEmpty);
+    });
+  });
+
+  group('11. Media Removal & Task Decoupling Lifecycle (Milestone 4)', () {
+    test('Removing media item decouples linked tasks while keeping completion state', () {
+      final mediaId = 'med_to_remove';
+      final linkedTask = Task(
+        id: 't1',
+        title: 'Read 25 Pages of Dune',
+        status: TaskStatus.done,
+        category: TaskCategory.daily,
+        linkedMediaId: mediaId,
+        mediaUnitsToAdvance: 25.0,
+        mediaTitle: 'Dune',
+      );
+      final unlinkedTask = Task(
+        id: 't2',
+        title: 'Buy Groceries',
+        status: TaskStatus.pending,
+        category: TaskCategory.daily,
+      );
+
+      final tasks = [linkedTask, unlinkedTask];
+
+      // Simulate decoupling logic executed on media removal
+      final updatedTasks = tasks.map((t) {
+        if (t.linkedMediaId == mediaId) {
+          return t.copyWith(clearLinkedMedia: true);
+        }
+        return t;
+      }).toList();
+
+      expect(updatedTasks[0].linkedMediaId, isNull);
+      expect(updatedTasks[0].mediaUnitsToAdvance, isNull);
+      expect(updatedTasks[0].mediaTitle, isNull);
+      expect(updatedTasks[0].title, 'Read 25 Pages of Dune');
+      expect(updatedTasks[0].status, TaskStatus.done); // Preserves completed history!
+
+      expect(updatedTasks[1].id, 't2');
+      expect(updatedTasks[1].title, 'Buy Groceries');
+    });
+
+    test('Restoring removed media on Undo re-links task references', () {
+      final media = MediaItem(
+        id: 'med_restore',
+        type: MediaType.book,
+        title: 'Dune',
+        releaseYear: 1965,
+        progressCurrent: 50,
+        progressTotal: 500,
+      );
+      var decoupledTask = Task(
+        id: 't1',
+        title: 'Read 25 Pages of Dune',
+        status: TaskStatus.pending,
+        category: TaskCategory.daily,
+      );
+
+      // Re-link
+      final reLinkedTask = decoupledTask.copyWith(
+        linkedMediaId: media.id,
+        mediaTitle: media.title,
+        mediaUnitsToAdvance: 25,
+      );
+
+      expect(reLinkedTask.linkedMediaId, 'med_restore');
+      expect(reLinkedTask.mediaTitle, 'Dune');
+      expect(reLinkedTask.mediaUnitsToAdvance, 25.0);
+    });
+  });
+
+  group('12. Context-Aware Task Scheduling & Dynamic Date Binding (Milestone 6)', () {
+    test('promoteToDaily binds targetDateJalali to arbitrary selected date', () {
+      final backlogTask = Task(
+        id: 'b1',
+        title: 'Prepare Presentation',
+        category: TaskCategory.general,
+      );
+
+      final selectedFutureDate = Jalali(1404, 5, 12);
+      final promotedTask = TaskStreamFlowService.promoteToDaily(
+        backlogTask,
+        selectedFutureDate,
+      );
+
+      expect(promotedTask.category, TaskCategory.daily);
+      expect(promotedTask.targetDateJalali, '1404-05-12');
+      expect(promotedTask.targetDateJalali, isNot(DateNavigationService.formatJalaliKey(Jalali.now())));
+    });
+
+    test('demoteToBacklog clears targetDate and resets postponed status', () {
+      final dailyTask = Task(
+        id: 'd1',
+        title: 'Review PR',
+        category: TaskCategory.daily,
+        targetDateJalali: '1403-08-25',
+        status: TaskStatus.postponed,
+        postponedCount: 1,
+      );
+
+      final demoted = TaskStreamFlowService.demoteToBacklog(dailyTask);
+      expect(demoted.category, TaskCategory.general);
+      expect(demoted.targetDateJalali, isNull);
+      expect(demoted.status, TaskStatus.pending);
+      expect(demoted.postponedCount, 1);
+    });
+  });
+
+  group('13. Task Card UI & "Due Today" Removal Regression (Milestone 1 & 2)', () {
+    testWidgets('Pending daily task renders without "Due Today" text', (tester) async {
+      final task = Task(
+        id: 't_clean',
+        title: 'Write Documentation',
+        status: TaskStatus.pending,
+        category: TaskCategory.daily,
+      );
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      // Verify task title is rendered
+      expect(find.text('Write Documentation'), findsOneWidget);
+      // Verify "Due Today" is completely absent from the UI!
+      expect(find.text('Due Today'), findsNothing);
+    });
+
+    testWidgets('Linked media task renders increment badge', (tester) async {
+      final task = Task(
+        id: 't_media',
+        title: 'Read 25 Pages of Dune',
+        status: TaskStatus.pending,
+        category: TaskCategory.daily,
+        linkedMediaId: 'med_1',
+        mediaTitle: 'Dune',
+        mediaUnitsToAdvance: 25.0,
+      );
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('+25 on check'), findsOneWidget);
+      expect(find.text('Due Today'), findsNothing);
+    });
+
+    testWidgets('Postponed task renders postponed badge', (tester) async {
+      final task = Task(
+        id: 't_postponed',
+        title: 'Clean Garage',
+        status: TaskStatus.postponed,
+        postponedCount: 2,
+        category: TaskCategory.daily,
+      );
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Postponed (2x)'), findsOneWidget);
+      expect(find.text('Due Today'), findsNothing);
+    });
+
+    testWidgets('General task renders dynamic schedule label', (tester) async {
+      final task = Task(
+        id: 't_backlog',
+        title: 'Learn Rust',
+        status: TaskStatus.pending,
+        category: TaskCategory.general,
+      );
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              scheduleLabel: '📅 Assign to Day',
+              onScheduleForDate: () {},
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('📅 Assign to Day'), findsOneWidget);
+      expect(find.text('Due Today'), findsNothing);
+    });
+  });
+
+  group('14. Title Case Input Formatting (Task 4)', () {
+    test('toTitleCase capitalizes first letter of every word correctly', () {
+      expect(toTitleCase('hello world'), 'Hello World');
+      expect(toTitleCase('dune: part two'), 'Dune: Part Two');
+      expect(toTitleCase('spider-man: miles morales'), 'Spider-Man: Miles Morales');
+      expect(toTitleCase('123 start action'), '123 Start Action');
+      expect(toTitleCase(''), '');
+      expect(toTitleCase('کتاب فارسی'), 'کتاب فارسی');
+    });
+
+    test('TitleCaseTextInputFormatter preserves text selection position', () {
+      final formatter = TitleCaseTextInputFormatter();
+      const oldValue = TextEditingValue(text: 'read dun', selection: TextSelection.collapsed(offset: 8));
+      const newValue = TextEditingValue(text: 'read dune', selection: TextSelection.collapsed(offset: 9));
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+      expect(result.text, 'Read Dune');
+      expect(result.selection.baseOffset, 9);
+    });
+  });
+
+  group('15. SafeCoverImage & LaunchBox / URL Sanitization (Task 5)', () {
+    test('sanitizeUrl fixes double slashes in image path (LaunchBox example)', () {
+      const badUrl = 'https://images.launchbox-app.com//e9438ab4-d720-4360-8659-951ecdb50cc3.jpg';
+      final clean = SafeCoverImage.sanitizeUrl(badUrl);
+      expect(clean, 'https://images.launchbox-app.com/e9438ab4-d720-4360-8659-951ecdb50cc3.jpg');
+    });
+
+    test('toCorsProxyUrl creates weserv proxy URL', () {
+      const url = 'https://images.launchbox-app.com/e9438ab4.jpg';
+      final proxy = SafeCoverImage.toCorsProxyUrl(url);
+      expect(proxy.startsWith('https://images.weserv.nl/?url='), isTrue);
+      expect(proxy.contains('launchbox-app.com'), isTrue);
+    });
+
+    test('CoverFetchService.sanitizeImageUrl cleans URL paths', () {
+      final clean = CoverFetchService.sanitizeImageUrl('https://example.com///path//img.png');
+      expect(clean, 'https://example.com/path/img.png');
+    });
+  });
+
+  group('16. Shamsi Agenda Banner: Reminders Removed & Date Pick Added (Tasks 2 & 3)', () {
+    testWidgets('ShamsiAgendaBanner renders without + Reminder and with Pick Date', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShamsiAgendaBanner(
+              events: const [],
+              palette: palette,
+            ),
+          ),
+        ),
+      );
+
+      // Verify + Reminder is completely absent!
+      expect(find.text('+ Reminder'), findsNothing);
+      expect(find.text('No reminders or events scheduled for this day.'), findsNothing);
+
+      // Verify Pick Date button exists
+      expect(find.text('Pick Date'), findsOneWidget);
+
+      // Verify month navigation buttons exist
+      expect(find.text('« Month'), findsOneWidget);
+      expect(find.text('Month »'), findsOneWidget);
+    });
+  });
+
+  group('17. Month Navigation & DateNavigationService.shiftMonths', () {
+    test('shiftMonths advances within the same year', () {
+      final start = Jalali(1403, 5, 15);
+      final next = DateNavigationService.shiftMonths(start, 1);
+      expect(next.year, 1403);
+      expect(next.month, 6);
+      expect(next.day, 15);
+    });
+
+    test('shiftMonths goes backward within the same year', () {
+      final start = Jalali(1403, 5, 15);
+      final prev = DateNavigationService.shiftMonths(start, -1);
+      expect(prev.year, 1403);
+      expect(prev.month, 4);
+      expect(prev.day, 15);
+    });
+
+    test('shiftMonths rolls over to next year from Esfand', () {
+      final start = Jalali(1403, 12, 10);
+      final next = DateNavigationService.shiftMonths(start, 1);
+      expect(next.year, 1404);
+      expect(next.month, 1);
+      expect(next.day, 10);
+    });
+
+    test('shiftMonths rolls over to previous year from Farvardin', () {
+      final start = Jalali(1403, 1, 10);
+      final prev = DateNavigationService.shiftMonths(start, -1);
+      expect(prev.year, 1402);
+      expect(prev.month, 12);
+      expect(prev.day, 10);
+    });
+
+    test('shiftMonths clamps day if destination month has fewer days', () {
+      // Shahrivar has 31 days; Mehr has 30 days
+      final start = Jalali(1403, 6, 31);
+      final next = DateNavigationService.shiftMonths(start, 1);
+      expect(next.year, 1403);
+      expect(next.month, 7);
+      expect(next.day, 30);
+    });
+  });
+
+  group('18. Tomorrow Button Tooltip & Long Press Decoupling', () {
+    testWidgets('Tomorrow button shows Tooltip without triggering postpone modal on long press', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      bool postponeToDateTriggered = false;
+
+      final task = Task(
+        id: 't1',
+        title: 'Review PR',
+        category: TaskCategory.daily,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              onStatusChange: (_) {},
+              onPostponeToDate: () => postponeToDateTriggered = true,
+            ),
+          ),
+        ),
+      );
+
+      // Verify Tomorrow button exists
+      final tomorrowFinder = find.text('Tomorrow');
+      expect(tomorrowFinder, findsOneWidget);
+
+      // Long press the button
+      await tester.longPress(tomorrowFinder);
+      await tester.pumpAndSettle();
+
+      // onPostponeToDate should NOT be called on long press!
+      expect(postponeToDateTriggered, isFalse);
+
+      // Tooltip should be present
+      final tooltip = tester.widget<Tooltip>(
+        find.ancestor(of: tomorrowFinder, matching: find.byType(Tooltip)),
+      );
+      expect(tooltip.message, 'Postpone task to tomorrow (+1 day)');
+    });
+  });
+
+  group('19. MediaCard Layout & Description Box Under Cover', () {
+    testWidgets('MediaCard renders description, score, progress, and actions under cover', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final item = MediaItem(
+        id: 'm1',
+        type: MediaType.videoGame,
+        title: 'Cyberpunk 2077',
+        releaseYear: 2020,
+        personalNotes: 'Finished Phantom Liberty expansion.',
+        progressCurrent: 30,
+        progressTotal: 50,
+        labels: ['RPG', 'Sci-Fi'],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: item,
+              palette: palette,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Verify Title, Labels, Personal Notes, and Actions are rendered cleanly
+      expect(find.text('Cyberpunk 2077'), findsOneWidget);
+      expect(find.text('RPG'), findsOneWidget);
+      expect(find.text('Sci-Fi'), findsOneWidget);
+      expect(find.text('📝 "Finished Phantom Liberty expansion."'), findsOneWidget);
+      expect(find.text('+ Update'), findsOneWidget);
+      expect(find.text('Schedule Today'), findsOneWidget);
     });
   });
 }

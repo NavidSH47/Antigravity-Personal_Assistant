@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shamsi_date/shamsi_date.dart';
+import 'package:persian_datetime_picker/persian_datetime_picker.dart';
+import 'package:persian_number_utility/persian_number_utility.dart';
 import '../models/shamsi_event.dart';
 import '../theme/app_theme.dart';
 import '../services/dual_calendar_service.dart';
@@ -8,8 +9,9 @@ import '../services/date_navigation_service.dart';
 class ShamsiAgendaBanner extends StatefulWidget {
   final List<ShamsiEvent> events;
   final VibePalette palette;
-  final Function(ShamsiEvent) onToggleCheckpoint;
-  final Function(ShamsiEvent) onAddEvent;
+  final Function(ShamsiEvent)? onToggleCheckpoint;
+  final Function(ShamsiEvent)? onAddEvent;
+  final Function(ShamsiEvent)? onRemoveEvent;
   final Jalali? selectedDate;
   final Function(Jalali)? onDateChanged;
 
@@ -17,8 +19,9 @@ class ShamsiAgendaBanner extends StatefulWidget {
     super.key,
     required this.events,
     required this.palette,
-    required this.onToggleCheckpoint,
-    required this.onAddEvent,
+    this.onToggleCheckpoint,
+    this.onAddEvent,
+    this.onRemoveEvent,
     this.selectedDate,
     this.onDateChanged,
   });
@@ -44,6 +47,35 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
       _internalSelectedDate = newDate;
     });
     widget.onDateChanged?.call(newDate);
+  }
+
+  Future<void> _pickGregorianDate() async {
+    final currentDt = _selectedDate.toDateTime();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: currentDt,
+      firstDate: DateTime(2000, 1, 1),
+      lastDate: DateTime(2070, 12, 31),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: widget.palette.accentPrimary,
+              onPrimary: Colors.black,
+              surface: widget.palette.bgElevated,
+              onSurface: widget.palette.textMain,
+            ),
+            dialogTheme: DialogThemeData(
+              backgroundColor: widget.palette.bgSurface,
+            ),
+          ),
+          child: child ?? const SizedBox(),
+        );
+      },
+    );
+    if (picked != null) {
+      _changeDate(Jalali.fromDateTime(picked));
+    }
   }
 
   static const List<String> _shamsiMonthNames = [
@@ -72,15 +104,7 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
   ];
 
   String _toPersianDigits(int number) {
-    const farsiDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-    return number
-        .toString()
-        .split('')
-        .map((ch) {
-          final idx = int.tryParse(ch);
-          return idx != null ? farsiDigits[idx] : ch;
-        })
-        .join();
+    return number.toString().toPersianDigit();
   }
 
   String _getWeekdayName(int weekDay) {
@@ -100,7 +124,7 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
           color: isHighlighted
               ? widget.palette.accentPrimary
@@ -133,150 +157,6 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
     );
   }
 
-  void _showAddEventDialog() {
-    final titleController = TextEditingController();
-    final noteController = TextEditingController();
-    EventCategory selectedCategory = EventCategory.birthday;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dialogCtx, setDialogState) {
-            return AlertDialog(
-              backgroundColor: widget.palette.bgElevated,
-              title: Text(
-                'Add Event / Reminder',
-                style: TextStyle(
-                  color: widget.palette.textMain,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Date: ${_selectedDate.day} ${_shamsiMonthNames[_selectedDate.month - 1]}',
-                      style: TextStyle(
-                        color: widget.palette.accentPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: titleController,
-                      style: TextStyle(color: widget.palette.textMain),
-                      decoration: InputDecoration(
-                        labelText: 'Title (e.g. Birthday, Exam, Milestone)',
-                        labelStyle: TextStyle(color: widget.palette.textMuted),
-                        filled: true,
-                        fillColor: widget.palette.bgSurface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: widget.palette.borderSubtle),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: noteController,
-                      style: TextStyle(color: widget.palette.textMain),
-                      decoration: InputDecoration(
-                        labelText: 'Notes (optional)',
-                        labelStyle: TextStyle(color: widget.palette.textMuted),
-                        filled: true,
-                        fillColor: widget.palette.bgSurface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: widget.palette.borderSubtle),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<EventCategory>(
-                      initialValue: selectedCategory,
-                      dropdownColor: widget.palette.bgElevated,
-                      style: TextStyle(color: widget.palette.textMain),
-                      decoration: InputDecoration(
-                        labelText: 'Category',
-                        labelStyle: TextStyle(color: widget.palette.textMuted),
-                        filled: true,
-                        fillColor: widget.palette.bgSurface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                              BorderSide(color: widget.palette.borderSubtle),
-                        ),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: EventCategory.birthday,
-                          child: Text('🎂 Birthday'),
-                        ),
-                        DropdownMenuItem(
-                          value: EventCategory.customDate,
-                          child: Text('🎯 Milestone / Exam'),
-                        ),
-                        DropdownMenuItem(
-                          value: EventCategory.holiday,
-                          child: Text('🏛️ Important Date'),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() => selectedCategory = val);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(color: widget.palette.textMuted),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.palette.accentPrimary,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: () {
-                    final title = titleController.text.trim();
-                    if (title.isNotEmpty) {
-                      final newEvent = ShamsiEvent(
-                        id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-                        title: title,
-                        jalaliMonth: _selectedDate.month,
-                        jalaliDay: _selectedDate.day,
-                        isCustom: true,
-                        category: selectedCategory,
-                        note: noteController.text.trim().isEmpty
-                            ? null
-                            : noteController.text.trim(),
-                      );
-                      widget.onAddEvent(newEvent);
-                      Navigator.pop(dialogCtx);
-                    }
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final selectedDayEvents = _eventsForSelectedDay();
@@ -294,12 +174,12 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top Header Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // Shamsi Date Badge
-              Row(
+          // Top Header Row (Adaptive LayoutBuilder for Anti-Overflow)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 380;
+              final dateSection = Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     _toPersianDigits(_selectedDate.day),
@@ -332,13 +212,14 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                     ],
                   ),
                 ],
-              ),
+              );
 
-              // Calendar Toggle Button
-              Row(
+              final actionButtons = Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Pick Date Button using standard Gregorian DatePicker
                   InkWell(
-                    onTap: _showAddEventDialog,
+                    onTap: _pickGregorianDate,
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -350,17 +231,24 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                         border: Border.all(color: widget.palette.borderSubtle),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        '+ Reminder',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: widget.palette.accentPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('🗓️ ', style: TextStyle(fontSize: 11)),
+                          Text(
+                            'Pick Date',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: widget.palette.accentPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
+                  // Expand/Collapse Month Grid Button
                   InkWell(
                     onTap: () {
                       setState(() {
@@ -370,7 +258,7 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
+                        horizontal: 8,
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
@@ -383,7 +271,9 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                         children: [
                           const Text('📅 ', style: TextStyle(fontSize: 11)),
                           Text(
-                            _isCalendarExpanded ? 'Close Calendar' : 'Shamsi Calendar',
+                            _isCalendarExpanded
+                                ? 'Close'
+                                : (isNarrow ? 'Calendar' : 'Shamsi Calendar'),
                             style: TextStyle(
                               fontSize: 11,
                               color: widget.palette.textMain,
@@ -395,45 +285,96 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                     ),
                   ),
                 ],
-              ),
-            ],
+              );
+
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: dateSection),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [actionButtons],
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(child: dateSection),
+                  actionButtons,
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 10),
 
-          // Quick Date Navigation Bar: [ « Week ] [ ‹ Day ] [ Today ] [ Day › ] [ Week » ]
+          // Quick Date Navigation Bar: [ « Month ] [ ‹ Week ] [ ‹ Day ] [ Today ] [ Day › ] [ Week › ] [ Month » ]
           Container(
+            width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
               color: widget.palette.bgElevated,
               border: Border.all(color: widget.palette.borderSubtle),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildQuickNavButton(
-                  label: '« Week',
-                  onTap: () => _changeDate(_selectedDate.addDays(-7)),
-                ),
-                _buildQuickNavButton(
-                  label: '‹ Day',
-                  onTap: () => _changeDate(_selectedDate.addDays(-1)),
-                ),
-                _buildQuickNavButton(
-                  label: 'Today',
-                  isHighlighted: DateNavigationService.isToday(_selectedDate),
-                  onTap: () => _changeDate(Jalali.now()),
-                ),
-                _buildQuickNavButton(
-                  label: 'Day ›',
-                  onTap: () => _changeDate(_selectedDate.addDays(1)),
-                ),
-                _buildQuickNavButton(
-                  label: 'Week »',
-                  onTap: () => _changeDate(_selectedDate.addDays(7)),
-                ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, navConstraints) {
+                return FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.center,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: navConstraints.maxWidth),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildQuickNavButton(
+                          label: '« Month',
+                          onTap: () => _changeDate(
+                            DateNavigationService.shiftMonths(_selectedDate, -1),
+                          ),
+                        ),
+                        _buildQuickNavButton(
+                          label: '‹ Week',
+                          onTap: () => _changeDate(_selectedDate.addDays(-7)),
+                        ),
+                        _buildQuickNavButton(
+                          label: '‹ Day',
+                          onTap: () => _changeDate(_selectedDate.addDays(-1)),
+                        ),
+                        _buildQuickNavButton(
+                          label: 'Today',
+                          isHighlighted: DateNavigationService.isToday(_selectedDate),
+                          onTap: () => _changeDate(Jalali.now()),
+                        ),
+                        _buildQuickNavButton(
+                          label: 'Day ›',
+                          onTap: () => _changeDate(_selectedDate.addDays(1)),
+                        ),
+                        _buildQuickNavButton(
+                          label: 'Week ›',
+                          onTap: () => _changeDate(_selectedDate.addDays(7)),
+                        ),
+                        _buildQuickNavButton(
+                          label: 'Month »',
+                          onTap: () => _changeDate(
+                            DateNavigationService.shiftMonths(_selectedDate, 1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ),
 
@@ -491,6 +432,10 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                         final isSelected = dayNum == _selectedDate.day;
                         final hasEvents =
                             _dayHasEvent(_selectedDate.month, dayNum);
+                        final todayJalali = Jalali.now();
+                        final isToday = _selectedDate.year == todayJalali.year &&
+                            _selectedDate.month == todayJalali.month &&
+                            dayNum == todayJalali.day;
 
                         return InkWell(
                           onTap: () {
@@ -507,7 +452,18 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? widget.palette.accentPrimary
-                                  : Colors.transparent,
+                                  : (isToday
+                                      ? widget.palette.accentPrimary
+                                          .withValues(alpha: 0.15)
+                                      : Colors.transparent),
+                              border: isToday
+                                  ? Border.all(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : widget.palette.accentPrimary,
+                                      width: 1.5,
+                                    )
+                                  : null,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Stack(
@@ -517,12 +473,14 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                                   _toPersianDigits(dayNum),
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: isSelected
+                                    fontWeight: isSelected || isToday
                                         ? FontWeight.bold
                                         : FontWeight.normal,
                                     color: isSelected
                                         ? Colors.black
-                                        : widget.palette.textMain,
+                                        : (isToday
+                                            ? widget.palette.accentPrimary
+                                            : widget.palette.textMain),
                                   ),
                                 ),
                                 if (hasEvents && !isSelected)
@@ -549,127 +507,91 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
             ),
           ],
 
-          const SizedBox(height: 10),
+          // Holidays & Notable Events Display (Clean RTL badge, no reminder checkboxes or empty reminder placeholders)
+          if (selectedDayEvents.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Directionality(
+              textDirection: TextDirection.rtl,
+              child: Column(
+                children: selectedDayEvents.map((evt) {
+                  Color bgColor;
+                  Color borderColor;
+                  Color textColor;
+                  String icon;
 
-          // Agenda Reminders & Checkpoints (Strictly RTL)
-          Directionality(
-            textDirection: TextDirection.ltr,
-            child: selectedDayEvents.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Text(
-                      'No reminders or events scheduled for this day.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: widget.palette.textDim,
-                        fontStyle: FontStyle.italic,
-                      ),
+                  switch (evt.category) {
+                    case EventCategory.holiday:
+                      bgColor = const Color(0x26F59E0B);
+                      borderColor = const Color(0x66F59E0B);
+                      textColor = const Color(0xFFFBBF24);
+                      icon = '🏛️';
+                      break;
+                    case EventCategory.birthday:
+                      bgColor = const Color(0x26EC4899);
+                      borderColor = const Color(0x66EC4899);
+                      textColor = const Color(0xFFF472B6);
+                      icon = '🎂';
+                      break;
+                    case EventCategory.customDate:
+                      bgColor = const Color(0x2060A5FA);
+                      borderColor = const Color(0x5060A5FA);
+                      textColor = const Color(0xFF93C5FD);
+                      icon = '🎯';
+                      break;
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
                     ),
-                  )
-                : Directionality(
-                    textDirection: TextDirection.rtl,
-                    child: Column(
-                    children: selectedDayEvents.map((evt) {
-                      Color bgColor;
-                      Color borderColor;
-                      Color textColor;
-                      String icon;
-
-                      switch (evt.category) {
-                        case EventCategory.holiday:
-                          bgColor = const Color(0x26F59E0B);
-                          borderColor = const Color(0x66F59E0B);
-                          textColor = const Color(0xFFFBBF24);
-                          icon = '🏛️';
-                          break;
-                        case EventCategory.birthday:
-                          bgColor = const Color(0x26EC4899);
-                          borderColor = const Color(0x66EC4899);
-                          textColor = const Color(0xFFF472B6);
-                          icon = '🎂';
-                          break;
-                        case EventCategory.customDate:
-                          bgColor = const Color(0x2060A5FA);
-                          borderColor = const Color(0x5060A5FA);
-                          textColor = const Color(0xFF93C5FD);
-                          icon = '🎯';
-                          break;
-                      }
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: bgColor,
-                          border: Border.all(color: borderColor),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            // Right side: Icon + Title
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Text(icon, style: const TextStyle(fontSize: 13)),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      evt.title,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: evt.actionChecked
-                                            ? textColor.withValues(alpha: 0.5)
-                                            : textColor,
-                                        decoration: evt.actionChecked
-                                            ? TextDecoration.lineThrough
-                                            : null,
-                                        decorationColor: textColor,
-                                        decorationThickness: 1.5,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // Left side: Checkpoint Box
-                            InkWell(
-                              onTap: () => widget.onToggleCheckpoint(evt),
-                              child: Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: evt.actionChecked
-                                      ? textColor
-                                      : Colors.transparent,
-                                  border: Border.all(
+                    decoration: BoxDecoration(
+                      color: bgColor,
+                      border: Border.all(color: borderColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Text(icon, style: const TextStyle(fontSize: 13)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  evt.title,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
                                     color: textColor,
-                                    width: 1.5,
                                   ),
-                                  borderRadius: BorderRadius.circular(4),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                child: evt.actionChecked
-                                    ? const Icon(
-                                        Icons.check,
-                                        size: 14,
-                                        color: Colors.black,
-                                      )
-                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (widget.onRemoveEvent != null && evt.isCustom)
+                          InkWell(
+                            onTap: () => widget.onRemoveEvent!(evt),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: Icon(
+                                Icons.delete_outline,
+                                size: 16,
+                                color: textColor.withValues(alpha: 0.8),
                               ),
                             ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-          ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
         ],
       ),
     );

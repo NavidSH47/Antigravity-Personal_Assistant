@@ -93,9 +93,17 @@ class StorageService {
     }
     try {
       final list = jsonDecode(raw) as List<dynamic>;
-      return list
+      final saved = list
           .map((e) => ShamsiEvent.fromJson(e as Map<String, dynamic>))
           .toList();
+      final existingIds = {for (final e in saved) e.id};
+      final merged = List<ShamsiEvent>.from(saved);
+      for (final def in ShamsiEvent.defaultEvents) {
+        if (!existingIds.contains(def.id)) {
+          merged.add(def);
+        }
+      }
+      return merged;
     } catch (_) {
       return ShamsiEvent.defaultEvents;
     }

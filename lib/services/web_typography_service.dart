@@ -8,10 +8,11 @@ class WebTypographyService {
     'Comic Neue',
     'Quicksand',
     'Fira Code',
+    'Lora',
   ];
 
   static const String googleFontsCssUrl =
-      'https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Fira+Code:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Vazirmatn:wght@300;400;500;700;900&display=swap';
+      'https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Fira+Code:wght@400;600;700&family=Lora:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Vazirmatn:wght@300;400;500;700;900&display=swap';
 
   /// Returns the effective primary font family name for CSS / Canvas rendering.
   static String getEffectiveFontFamily(AppFontStyle font) {

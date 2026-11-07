@@ -1,5 +1,6 @@
 import 'package:intl/intl.dart';
 import 'package:shamsi_date/shamsi_date.dart';
+import 'package:persian_number_utility/persian_number_utility.dart';
 import '../models/shamsi_event.dart';
 
 /// Service providing bilingual (Solar Hijri & Gregorian) dates and checkpoint UI helpers.
@@ -29,17 +30,9 @@ class DualCalendarService {
     'جمعه',
   ];
 
-  /// Converts an English integer to Persian digits.
+  /// Converts an English integer or string to Persian digits using persian_number_utility.
   static String toPersianDigits(int number) {
-    const farsiDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-    return number
-        .toString()
-        .split('')
-        .map((ch) {
-          final idx = int.tryParse(ch);
-          return idx != null ? farsiDigits[idx] : ch;
-        })
-        .join();
+    return number.toString().toPersianDigit();
   }
 
   /// Returns Persian weekday name: 1 = شنبه (Saturday) to 7 = جمعه (Friday).

@@ -45,6 +45,7 @@ class Task {
     int? orderIndex,
     int? postponedCount,
     String? linkedMediaId,
+    bool clearLinkedMedia = false,
     double? mediaUnitsToAdvance,
     String? mediaTitle,
     DateTime? createdAt,
@@ -61,9 +62,13 @@ class Task {
       status: status ?? this.status,
       orderIndex: orderIndex ?? this.orderIndex,
       postponedCount: postponedCount ?? this.postponedCount,
-      linkedMediaId: linkedMediaId ?? this.linkedMediaId,
-      mediaUnitsToAdvance: mediaUnitsToAdvance ?? this.mediaUnitsToAdvance,
-      mediaTitle: mediaTitle ?? this.mediaTitle,
+      linkedMediaId: clearLinkedMedia
+          ? null
+          : (linkedMediaId ?? this.linkedMediaId),
+      mediaUnitsToAdvance: clearLinkedMedia
+          ? null
+          : (mediaUnitsToAdvance ?? this.mediaUnitsToAdvance),
+      mediaTitle: clearLinkedMedia ? null : (mediaTitle ?? this.mediaTitle),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

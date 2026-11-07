@@ -293,16 +293,15 @@ class AppTheme {
   static String getFontFamilyName(AppFontStyle font) {
     switch (font) {
       case AppFontStyle.defaultSans:
-        return 'sans-serif';
+        return 'Vazirmatn';
       case AppFontStyle.comicSans:
-        // Use Comic Sans MS for Latin with clean fallback for Persian
-        return 'Comic Sans MS';
+        return 'Comic Neue';
       case AppFontStyle.roundedBold:
-        return 'Arial Rounded MT Bold';
+        return 'Quicksand';
       case AppFontStyle.techMono:
-        return 'Cascadia Code';
+        return 'Fira Code';
       case AppFontStyle.editorialSerif:
-        return 'Georgia';
+        return 'Lora';
       case AppFontStyle.vazirmatn:
         return 'Vazirmatn';
     }
@@ -328,18 +327,17 @@ class AppTheme {
   static List<String> getFontFallbackList(AppFontStyle font) {
     switch (font) {
       case AppFontStyle.comicSans:
-        // Key feature: Persian characters fall back to clean Vazirmatn/system sans
-        return ['Comic Neue', 'Vazirmatn', 'Segoe UI', 'sans-serif'];
+        return ['Comic Neue', 'Comic Sans MS', 'Comic Sans', 'Vazirmatn', 'Roboto', 'sans-serif'];
       case AppFontStyle.roundedBold:
-        return ['Quicksand', 'Nunito', 'Vazirmatn', 'sans-serif'];
-      case AppFontStyle.techMono:
-        return ['Fira Code', 'Consolas', 'Vazirmatn', 'monospace'];
-      case AppFontStyle.editorialSerif:
-        return ['Cambria', 'Times New Roman', 'Vazirmatn', 'serif'];
+        return ['Quicksand', 'Arial Rounded MT Bold', 'Vazirmatn', 'Roboto', 'sans-serif'];
       case AppFontStyle.vazirmatn:
-        return ['Tahoma', 'Segoe UI', 'sans-serif'];
+        return ['Vazirmatn', 'Vazir', 'Tahoma', 'sans-serif'];
+      case AppFontStyle.techMono:
+        return ['Fira Code', 'Cascadia Code', 'Consolas', 'Vazirmatn', 'monospace'];
+      case AppFontStyle.editorialSerif:
+        return ['Lora', 'Georgia', 'Cambria', 'Vazirmatn', 'serif'];
       case AppFontStyle.defaultSans:
-        return ['Vazirmatn', 'Segoe UI', 'Roboto', 'sans-serif'];
+        return ['Vazirmatn', 'Roboto', 'Segoe UI', 'sans-serif'];
     }
   }
 
