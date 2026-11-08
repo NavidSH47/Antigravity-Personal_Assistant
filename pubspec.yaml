@@ -40,6 +40,8 @@ dependencies:
   intl: ^0.20.3
   persian_datetime_picker: ^3.2.0
   persian_number_utility: ^1.1.6
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:
@@ -77,11 +79,6 @@ flutter:
       fonts:
         - asset: assets/fonts/Quicksand-Regular.ttf
         - asset: assets/fonts/Quicksand-Bold.ttf
-          weight: 700
-    - family: Vazirmatn
-      fonts:
-        - asset: assets/fonts/Vazirmatn-Regular.ttf
-        - asset: assets/fonts/Vazirmatn-Bold.ttf
           weight: 700
     - family: Fira Code
       fonts:

@@ -11,6 +11,7 @@ class ShamsiAgendaBanner extends StatefulWidget {
   final VibePalette palette;
   final Function(ShamsiEvent)? onToggleCheckpoint;
   final Function(ShamsiEvent)? onAddEvent;
+  final VoidCallback? onAddCustomEvent;
   final Function(ShamsiEvent)? onRemoveEvent;
   final Jalali? selectedDate;
   final Function(Jalali)? onDateChanged;
@@ -21,6 +22,7 @@ class ShamsiAgendaBanner extends StatefulWidget {
     required this.palette,
     this.onToggleCheckpoint,
     this.onAddEvent,
+    this.onAddCustomEvent,
     this.onRemoveEvent,
     this.selectedDate,
     this.onDateChanged,
@@ -151,10 +153,23 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
     }).toList();
   }
 
-  bool _dayHasEvent(int month, int day) {
-    return widget.events.any(
+  Color? _resolveDotColor(int month, int day) {
+    final dayEvents = widget.events.where(
       (e) => e.isEnabled && e.jalaliMonth == month && e.jalaliDay == day,
-    );
+    ).toList();
+
+    if (dayEvents.isEmpty) return null;
+
+    // Priority 1: User Birthdays (Pink)
+    if (dayEvents.any((e) => e.category == EventCategory.birthday)) {
+      return const Color(0xFFEC4899);
+    }
+    // Priority 2: User Custom Milestones/Events (Blue)
+    if (dayEvents.any((e) => e.category == EventCategory.customDate)) {
+      return const Color(0xFF60A5FA);
+    }
+    // Priority 3: Default Official Holiday (Orange)
+    return const Color(0xFFF59E0B);
   }
 
   @override
@@ -217,6 +232,40 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
               final actionButtons = Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Add Custom Event Button
+                  if (widget.onAddCustomEvent != null) ...[
+                    InkWell(
+                      onTap: widget.onAddCustomEvent,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: widget.palette.bgElevated,
+                          border: Border.all(color: widget.palette.borderSubtle),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.add, size: 12, color: widget.palette.accentPrimary),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Event',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: widget.palette.accentPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   // Pick Date Button using standard Gregorian DatePicker
                   InkWell(
                     onTap: _pickGregorianDate,
@@ -430,8 +479,7 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                       itemBuilder: (context, index) {
                         final dayNum = index + 1;
                         final isSelected = dayNum == _selectedDate.day;
-                        final hasEvents =
-                            _dayHasEvent(_selectedDate.month, dayNum);
+                        final dotColor = _resolveDotColor(_selectedDate.month, dayNum);
                         final todayJalali = Jalali.now();
                         final isToday = _selectedDate.year == todayJalali.year &&
                             _selectedDate.month == todayJalali.month &&
@@ -483,14 +531,14 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                                             : widget.palette.textMain),
                                   ),
                                 ),
-                                if (hasEvents && !isSelected)
+                                if (dotColor != null && !isSelected)
                                   Positioned(
                                     bottom: 2,
                                     child: Container(
                                       width: 4,
                                       height: 4,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFFF59E0B),
+                                      decoration: BoxDecoration(
+                                        color: dotColor,
                                         shape: BoxShape.circle,
                                       ),
                                     ),

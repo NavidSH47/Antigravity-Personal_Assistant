@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'models/task.dart';
 import 'models/shamsi_event.dart';
@@ -13,10 +14,12 @@ import 'services/dual_calendar_service.dart';
 import 'services/media_label_service.dart';
 import 'services/media_goal_sync_service.dart';
 import 'services/cover_fetch_service.dart';
+import 'services/sentence_case_service.dart';
 import 'widgets/shamsi_agenda_banner.dart';
 import 'widgets/task_card.dart';
 import 'widgets/media_card.dart';
 import 'widgets/settings_drawer.dart';
+import 'widgets/rtl_aware_text_field.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import 'services/title_case_service.dart';
 import 'widgets/safe_cover_image.dart';
@@ -247,10 +250,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+                    RtlAwareTextField(
                       controller: noteController,
-                      textCapitalization: TextCapitalization.words,
-                      inputFormatters: [TitleCaseTextInputFormatter()],
                       style: TextStyle(color: _palette.textMain),
                       decoration: InputDecoration(
                         labelText: 'Optional note (e.g. read chapter 4, watch with friends)',
@@ -320,191 +321,241 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showEditLabelsDialog(MediaItem item) {
-    List<String> assignedLabels = List<String>.from(item.labels);
-    final customTagController = TextEditingController();
-    final allExisting = _mediaItems.expand((m) => m.labels).toSet().toList();
+  void _showLabelSelectionModal({
+    required BuildContext context,
+    required List<String> initialSelected,
+    required ValueChanged<List<String>> onDone,
+  }) {
+    List<String> selected = List<String>.from(initialSelected);
+    final searchController = TextEditingController();
+    String searchQuery = '';
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) {
+      isScrollControlled: true,
+      backgroundColor: _palette.bgElevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (modalCtx) {
         return StatefulBuilder(
-          builder: (dCtx, setDState) {
-            final suggestions = MediaLabelService.getSuggestions(
-              assignedLabels,
-              allExisting,
-            );
+          builder: (ctx, setMState) {
+            final allCustomTags = _mediaItems.expand((m) => m.labels).toSet();
+            final availablePool = <String>{...MediaLabelService.presetLabels, ...allCustomTags}.toList()..sort();
 
-            void addTag(String tag) {
-              setDState(() {
-                assignedLabels = MediaLabelService.addLabel(assignedLabels, tag);
-              });
-            }
+            final filteredPool = availablePool.where((tag) {
+              if (searchQuery.trim().isEmpty) return true;
+              return tag.toLowerCase().contains(searchQuery.trim().toLowerCase());
+            }).toList();
 
-            void removeTag(String tag) {
-              setDState(() {
-                assignedLabels = MediaLabelService.removeLabel(assignedLabels, tag);
-              });
-            }
+            final canAddNew = searchQuery.trim().isNotEmpty &&
+                !availablePool.any((t) => t.toLowerCase() == searchQuery.trim().toLowerCase());
 
-            return AlertDialog(
-              backgroundColor: _palette.bgElevated,
-              title: Text(
-                'Edit Labels: ${item.title}',
-                style: TextStyle(
-                  color: _palette.textMain,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+                top: 16,
+                left: 16,
+                right: 16,
               ),
-              content: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Assigned Labels:',
-                      style: TextStyle(
-                        color: _palette.textMain,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    assignedLabels.isEmpty
-                        ? Text(
-                            'No labels assigned yet.',
-                            style: TextStyle(
-                              color: _palette.textDim,
-                              fontSize: 11,
-                              fontStyle: FontStyle.italic,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('🏷️ ', style: TextStyle(fontSize: 16)),
+                            Text(
+                              'Select Labels / Tags',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: _palette.textMain,
+                              ),
                             ),
-                          )
-                        : Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
-                            children: assignedLabels.map((l) {
-                              return Chip(
-                                label: Text(l),
-                                labelStyle: TextStyle(
-                                  color: _palette.textMain,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                backgroundColor: _palette.bgSurface,
-                                deleteIcon: const Icon(Icons.close, size: 14),
-                                deleteIconColor: _palette.textMuted,
-                                onDeleted: () => removeTag(l),
-                              );
-                            }).toList(),
-                          ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Add Custom Label:',
-                      style: TextStyle(
-                        color: _palette.textMain,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, color: _palette.textMuted, size: 20),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 12),
+                    // Search or add new tag
                     Row(
                       children: [
                         Expanded(
                           child: TextField(
-                            controller: customTagController,
-                            textCapitalization: TextCapitalization.words,
-                            inputFormatters: [TitleCaseTextInputFormatter()],
+                            controller: searchController,
+                            textCapitalization: TextCapitalization.sentences,
+                            inputFormatters: [SentenceCaseTextInputFormatter()],
                             style: TextStyle(color: _palette.textMain),
                             decoration: InputDecoration(
-                              hintText: 'e.g. Masterpiece, RPG...',
+                              hintText: 'Search or add new tag...',
                               hintStyle: TextStyle(color: _palette.textDim),
+                              prefixIcon: Icon(Icons.search, size: 18, color: _palette.textDim),
                               filled: true,
                               fillColor: _palette.bgSurface,
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(color: _palette.borderSubtle),
                               ),
                             ),
+                            onChanged: (val) => setMState(() => searchQuery = val),
                             onSubmitted: (val) {
-                              if (val.trim().isNotEmpty) {
-                                addTag(toTitleCase(val.trim()));
-                                customTagController.clear();
+                              final trimmed = toSentenceCase(val.trim());
+                              if (trimmed.isNotEmpty) {
+                                setMState(() {
+                                  selected = MediaLabelService.addLabel(selected, trimmed);
+                                  searchController.clear();
+                                  searchQuery = '';
+                                });
                               }
                             },
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _palette.accentPrimary,
-                            foregroundColor: Colors.black,
+                        if (canAddNew) ...[
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _palette.accentPrimary,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Add'),
+                            onPressed: () {
+                              final trimmed = toSentenceCase(searchQuery.trim());
+                              if (trimmed.isNotEmpty) {
+                                setMState(() {
+                                  selected = MediaLabelService.addLabel(selected, trimmed);
+                                  searchController.clear();
+                                  searchQuery = '';
+                                });
+                              }
+                            },
                           ),
-                          onPressed: () {
-                            if (customTagController.text.trim().isNotEmpty) {
-                              addTag(toTitleCase(customTagController.text.trim()));
-                              customTagController.clear();
-                            }
-                          },
-                          child: const Text('Add'),
-                        ),
+                        ],
                       ],
                     ),
-                    if (suggestions.isNotEmpty) ...[
-                      const SizedBox(height: 14),
+                    const SizedBox(height: 12),
+                    if (selected.isNotEmpty) ...[
                       Text(
-                        'Suggestions:',
+                        'Selected (${selected.length}):',
                         style: TextStyle(
-                          color: _palette.textMuted,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: _palette.accentPrimary,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
-                        runSpacing: 4,
-                        children: suggestions.map((tag) {
-                          return ActionChip(
-                            label: Text('+ $tag'),
+                        runSpacing: 6,
+                        children: selected.map((tag) {
+                          return Chip(
+                            label: Text(tag),
                             labelStyle: TextStyle(
+                              color: _palette.textMain,
                               fontSize: 11,
-                              color: _palette.accentPrimary,
+                              fontWeight: FontWeight.bold,
                             ),
                             backgroundColor: _palette.bgSurface,
-                            onPressed: () => addTag(tag),
+                            deleteIcon: const Icon(Icons.close, size: 14),
+                            deleteIconColor: _palette.textMuted,
+                            onDeleted: () {
+                              setMState(() {
+                                selected = MediaLabelService.removeLabel(selected, tag);
+                              });
+                            },
                           );
                         }).toList(),
                       ),
+                      const SizedBox(height: 10),
+                      Divider(color: _palette.borderSubtle, height: 1),
+                      const SizedBox(height: 8),
                     ],
+                    Text(
+                      'Available Labels:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _palette.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: filteredPool.length,
+                        itemBuilder: (ctx, i) {
+                          final tag = filteredPool[i];
+                          final isChecked = selected.contains(tag);
+                          final isCustom = !MediaLabelService.presetLabels.contains(tag);
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Row(
+                              children: [
+                                Text(
+                                  tag,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: _palette.textMain,
+                                    fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                                if (isCustom) ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '(Custom)',
+                                    style: TextStyle(fontSize: 10, color: _palette.textDim),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            value: isChecked,
+                            activeColor: _palette.accentPrimary,
+                            checkColor: Colors.black,
+                            onChanged: (bool? val) {
+                              setMState(() {
+                                if (val == true) {
+                                  selected = MediaLabelService.addLabel(selected, tag);
+                                } else {
+                                  selected = MediaLabelService.removeLabel(selected, tag);
+                                }
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _palette.accentPrimary,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () {
+                        onDone(selected);
+                        Navigator.pop(modalCtx);
+                      },
+                      child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dCtx),
-                  child: Text('Cancel', style: TextStyle(color: _palette.textMuted)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _palette.accentPrimary,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      final idx = _mediaItems.indexWhere((m) => m.id == item.id);
-                      if (idx != -1) {
-                        _mediaItems[idx] =
-                            MediaLabelService.updateMediaLabels(item, assignedLabels);
-                      }
-                    });
-                    widget.storage.saveMediaItems(_mediaItems);
-                    Navigator.pop(dCtx);
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
             );
           },
         );
@@ -512,26 +563,57 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showEditLabelsDialog(MediaItem item) {
+    _showLabelSelectionModal(
+      context: context,
+      initialSelected: item.labels,
+      onDone: (newLabels) {
+        setState(() {
+          final idx = _mediaItems.indexWhere((m) => m.id == item.id);
+          if (idx != -1) {
+            _mediaItems[idx] = item.copyWith(labels: newLabels);
+          }
+        });
+        widget.storage.saveMediaItems(_mediaItems);
+      },
+    );
+  }
+
+
+
   void _editMediaNotes(MediaItem item) async {
     final controller = TextEditingController(text: item.personalNotes ?? '');
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Media Notes'),
-        content: TextField(
+        backgroundColor: _palette.bgElevated,
+        title: Text(
+          'Edit Media Notes',
+          style: TextStyle(color: _palette.textMain, fontWeight: FontWeight.bold),
+        ),
+        content: RtlAwareTextField(
           controller: controller,
-          textCapitalization: TextCapitalization.words,
-          inputFormatters: [TitleCaseTextInputFormatter()],
           maxLines: 5,
-          decoration: const InputDecoration(hintText: 'Enter notes'),
+          style: TextStyle(color: _palette.textMain),
+          decoration: InputDecoration(
+            hintText: 'Enter notes',
+            hintStyle: TextStyle(color: _palette.textDim.withValues(alpha: 0.45)),
+            filled: true,
+            fillColor: _palette.bgSurface,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: _palette.textMuted)),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(toTitleCase(controller.text)),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _palette.accentPrimary,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(toSentenceCase(controller.text.trim())),
             child: const Text('Save'),
           ),
         ],
@@ -562,9 +644,39 @@ class _HomeScreenState extends State<HomeScreen> {
   late List<ShamsiEvent> _events;
   late List<MediaItem> _mediaItems;
 
+  final ScrollController _scrollController = ScrollController();
+  Timer? _dragAutoScrollTimer;
+  double _lastPointerY = 0.0;
+  bool _isDraggingTask = false;
+
+  void _startAutoScrollTimer() {
+    _dragAutoScrollTimer?.cancel();
+    _dragAutoScrollTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (!_isDraggingTask || !_scrollController.hasClients) return;
+      final screenHeight = MediaQuery.of(context).size.height;
+      if (_lastPointerY > 0 && _lastPointerY < 90.0) {
+        final delta = (90.0 - _lastPointerY).clamp(0.0, 90.0) / 90.0 * 16.0;
+        final newOffset = (_scrollController.offset - delta).clamp(0.0, _scrollController.position.maxScrollExtent);
+        _scrollController.jumpTo(newOffset);
+      } else if (_lastPointerY > (screenHeight - 90.0) && _lastPointerY <= screenHeight) {
+        final delta = (_lastPointerY - (screenHeight - 90.0)).clamp(0.0, 90.0) / 90.0 * 16.0;
+        final newOffset = (_scrollController.offset + delta).clamp(0.0, _scrollController.position.maxScrollExtent);
+        _scrollController.jumpTo(newOffset);
+      }
+    });
+  }
+
+  void _stopAutoScrollTimer() {
+    _isDraggingTask = false;
+    _dragAutoScrollTimer?.cancel();
+    _dragAutoScrollTimer = null;
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
+    _dragAutoScrollTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -872,6 +984,342 @@ class _HomeScreenState extends State<HomeScreen> {
     widget.storage.saveTasks(_tasks);
   }
 
+  void _showAddCustomEventDialog() {
+    final titleController = TextEditingController();
+    final notesController = TextEditingController();
+    Jalali targetDate = _selectedDate;
+    EventCategory selectedCategory = EventCategory.birthday;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dCtx, setDState) {
+            return AlertDialog(
+              backgroundColor: _palette.bgElevated,
+              title: Row(
+                children: [
+                  const Text('📅 ', style: TextStyle(fontSize: 16)),
+                  Text(
+                    'Add Custom Event',
+                    style: TextStyle(
+                      color: _palette.textMain,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RtlAwareTextField(
+                      controller: titleController,
+                      autofocus: true,
+                      style: TextStyle(color: _palette.textMain),
+                      decoration: InputDecoration(
+                        labelText: 'Event Title',
+                        hintText: 'e.g. Sara\'s Birthday, Exam...',
+                        hintStyle: TextStyle(color: _palette.textDim),
+                        labelStyle: TextStyle(color: _palette.textMuted),
+                        filled: true,
+                        fillColor: _palette.bgSurface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showPersianDatePicker(
+                          context: context,
+                          initialDate: targetDate,
+                          firstDate: Jalali(1380, 1, 1),
+                          lastDate: Jalali(1450, 12, 29),
+                        );
+                        if (picked != null) {
+                          setDState(() => targetDate = picked);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: _palette.bgSurface,
+                          border: Border.all(color: _palette.borderSubtle),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Text('🗓️ ', style: TextStyle(fontSize: 13)),
+                                Text(
+                                  'Date: ${DualCalendarService.toShamsiString(targetDate)}',
+                                  style: TextStyle(
+                                    color: _palette.textMain,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Icon(Icons.edit, size: 14, color: _palette.accentPrimary),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Event Type:',
+                      style: TextStyle(
+                        color: _palette.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setDState(() => selectedCategory = EventCategory.birthday),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: selectedCategory == EventCategory.birthday
+                                    ? const Color(0x33EC4899)
+                                    : _palette.bgSurface,
+                                border: Border.all(
+                                  color: selectedCategory == EventCategory.birthday
+                                      ? const Color(0xFFEC4899)
+                                      : _palette.borderSubtle,
+                                  width: selectedCategory == EventCategory.birthday ? 1.5 : 1.0,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '🎂 Birthday',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: selectedCategory == EventCategory.birthday
+                                        ? const Color(0xFFF472B6)
+                                        : _palette.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setDState(() => selectedCategory = EventCategory.customDate),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: selectedCategory == EventCategory.customDate
+                                    ? const Color(0x3360A5FA)
+                                    : _palette.bgSurface,
+                                border: Border.all(
+                                  color: selectedCategory == EventCategory.customDate
+                                      ? const Color(0xFF60A5FA)
+                                      : _palette.borderSubtle,
+                                  width: selectedCategory == EventCategory.customDate ? 1.5 : 1.0,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '🎯 Milestone',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: selectedCategory == EventCategory.customDate
+                                        ? const Color(0xFF93C5FD)
+                                        : _palette.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    RtlAwareTextField(
+                      controller: notesController,
+                      maxLines: 2,
+                      style: TextStyle(color: _palette.textMain),
+                      decoration: InputDecoration(
+                        labelText: 'Optional Notes',
+                        hintText: '+ Add reminder notes...',
+                        hintStyle: TextStyle(color: _palette.textDim.withValues(alpha: 0.45)),
+                        labelStyle: TextStyle(color: _palette.textMuted),
+                        filled: true,
+                        fillColor: _palette.bgSurface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dCtx),
+                  child: Text('Cancel', style: TextStyle(color: _palette.textMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _palette.accentPrimary,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    final title = toSentenceCase(titleController.text.trim());
+                    if (title.isNotEmpty) {
+                      final newEvt = ShamsiEvent(
+                        id: 'custom_evt_${DateTime.now().millisecondsSinceEpoch}',
+                        title: title,
+                        jalaliMonth: targetDate.month,
+                        jalaliDay: targetDate.day,
+                        isCustom: true,
+                        isOfficialHoliday: false,
+                        category: selectedCategory,
+                        note: notesController.text.trim().isEmpty ? null : toSentenceCase(notesController.text.trim()),
+                      );
+                      setState(() {
+                        _events.add(newEvt);
+                      });
+                      widget.storage.saveShamsiEvents(_events);
+                      Navigator.pop(dCtx);
+                    }
+                  },
+                  child: const Text('Save Event', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditTaskDialog(Task task) {
+    final titleController = TextEditingController(text: task.title);
+    final notesController = TextEditingController(text: task.notes);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: _palette.bgElevated,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 20,
+            right: 20,
+            top: 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Edit Task',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: _palette.textMain,
+                ),
+              ),
+              const SizedBox(height: 14),
+              RtlAwareTextField(
+                controller: titleController,
+                autofocus: true,
+                style: TextStyle(color: _palette.textMain),
+                decoration: InputDecoration(
+                  labelText: 'Task Title',
+                  labelStyle: TextStyle(color: _palette.textMuted),
+                  hintText: 'What needs to get done?',
+                  hintStyle: TextStyle(color: _palette.textDim),
+                  filled: true,
+                  fillColor: _palette.bgSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: _palette.borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              RtlAwareTextField(
+                controller: notesController,
+                maxLines: 3,
+                style: TextStyle(color: _palette.textMain),
+                decoration: InputDecoration(
+                  labelText: 'Notes / Description',
+                  labelStyle: TextStyle(color: _palette.textMuted),
+                  hintText: 'Add extra details, checklist bullets, or notes (optional)...',
+                  hintStyle: TextStyle(color: _palette.textDim.withValues(alpha: 0.45)),
+                  filled: true,
+                  fillColor: _palette.bgSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: _palette.borderSubtle),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text('Cancel', style: TextStyle(color: _palette.textMuted)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _palette.accentPrimary,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () {
+                      final title = toSentenceCase(titleController.text.trim());
+                      if (title.isNotEmpty) {
+                        final notes = toSentenceCase(notesController.text.trim());
+                        setState(() {
+                          final idx = _tasks.indexWhere((t) => t.id == task.id);
+                          if (idx != -1) {
+                            _tasks[idx] = task.copyWith(
+                              title: title,
+                              notes: notes,
+                            );
+                          }
+                        });
+                        widget.storage.saveTasks(_tasks);
+                        Navigator.pop(ctx);
+                      }
+                    },
+                    child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _openAddTaskModal(TaskCategory category) {
     final titleController = TextEditingController();
     final notesController = TextEditingController();
@@ -906,11 +1354,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              TextField(
+              RtlAwareTextField(
                 controller: titleController,
                 autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                inputFormatters: [TitleCaseTextInputFormatter()],
                 style: TextStyle(color: _palette.textMain),
                 decoration: InputDecoration(
                   hintText: 'What needs to get done?',
@@ -924,16 +1370,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              TextField(
+              RtlAwareTextField(
                 controller: notesController,
-                textCapitalization: TextCapitalization.words,
-                inputFormatters: [TitleCaseTextInputFormatter()],
                 maxLines: 3,
                 style: TextStyle(color: _palette.textMain),
                 decoration: InputDecoration(
                   hintText:
                       'Add extra details, checklist bullets, or notes (optional)...',
-                  hintStyle: TextStyle(color: _palette.textDim),
+                  hintStyle: TextStyle(color: _palette.textDim.withValues(alpha: 0.45)),
                   filled: true,
                   fillColor: _palette.bgSurface,
                   border: OutlineInputBorder(
@@ -967,8 +1411,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (title.isNotEmpty) {
                         final newTask = Task(
                           id: 'task_${DateTime.now().millisecondsSinceEpoch}',
-                          title: toTitleCase(title),
-                          notes: toTitleCase(notesController.text.trim()),
+                          title: toSentenceCase(title),
+                          notes: toSentenceCase(notesController.text.trim()),
                           category: category,
                           targetDateJalali: category == TaskCategory.daily
                               ? DateNavigationService.formatJalaliKey(_selectedDate)
@@ -1564,7 +2008,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final yearController =
         TextEditingController(text: DateTime.now().year.toString());
     final totalController = TextEditingController(text: '100');
-    final tagInputController = TextEditingController();
     final coverUrlController = TextEditingController();
     MediaType selectedType = MediaType.book;
     List<String> selectedLabels = [];
@@ -1630,10 +2073,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                     const SizedBox(height: 10),
-                    TextField(
+                    RtlAwareTextField(
                       controller: titleController,
-                      textCapitalization: TextCapitalization.words,
-                      inputFormatters: [TitleCaseTextInputFormatter()],
                       style: TextStyle(color: _palette.textMain),
                       decoration: InputDecoration(
                         labelText: 'Title',
@@ -1693,44 +2134,50 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: MediaLabelService.presetLabels.map((preset) {
-                        final isSelected = selectedLabels.contains(preset);
-                        return FilterChip(
-                          label: Text(preset),
-                          selected: isSelected,
-                          selectedColor: _palette.accentPrimary.withValues(alpha: 0.3),
-                          checkmarkColor: _palette.accentPrimary,
-                          labelStyle: TextStyle(
-                            fontSize: 11,
-                            color: isSelected ? _palette.accentPrimary : _palette.textMain,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          backgroundColor: _palette.bgSurface,
-                          onSelected: (val) {
-                            setDState(() {
-                              if (val) {
-                                selectedLabels = MediaLabelService.addLabel(selectedLabels, preset);
-                              } else {
-                                selectedLabels = MediaLabelService.removeLabel(selectedLabels, preset);
-                              }
-                            });
+                    InkWell(
+                      onTap: () {
+                        _showLabelSelectionModal(
+                          context: dCtx,
+                          initialSelected: selectedLabels,
+                          onDone: (newLabels) {
+                            setDState(() => selectedLabels = newLabels);
                           },
                         );
-                      }).toList(),
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _palette.bgSurface,
+                          border: Border.all(color: _palette.borderSubtle),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              selectedLabels.isEmpty
+                                  ? '🏷️ Select Labels / Tags'
+                                  : '🏷️ Labels (${selectedLabels.length}): ${selectedLabels.take(3).join(', ')}${selectedLabels.length > 3 ? '...' : ''}',
+                              style: TextStyle(
+                                color: selectedLabels.isEmpty ? _palette.textDim : _palette.accentPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Icon(Icons.edit, size: 14, color: _palette.textDim),
+                          ],
+                        ),
+                      ),
                     ),
-                    if (selectedLabels.any((l) => !MediaLabelService.presetLabels.contains(l))) ...[
+                    if (selectedLabels.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
-                        children: selectedLabels
-                            .where((l) => !MediaLabelService.presetLabels.contains(l))
-                            .map((custom) {
+                        children: selectedLabels.map((l) {
                           return Chip(
-                            label: Text(custom),
+                            label: Text(l),
                             labelStyle: TextStyle(
                               fontSize: 11,
                               color: _palette.textMain,
@@ -1741,66 +2188,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             deleteIconColor: _palette.textMuted,
                             onDeleted: () {
                               setDState(() {
-                                selectedLabels = MediaLabelService.removeLabel(selectedLabels, custom);
+                                selectedLabels = MediaLabelService.removeLabel(selectedLabels, l);
                               });
                             },
                           );
                         }).toList(),
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: tagInputController,
-                            textCapitalization: TextCapitalization.words,
-                            inputFormatters: [TitleCaseTextInputFormatter()],
-                            style: TextStyle(color: _palette.textMain),
-                            decoration: InputDecoration(
-                              hintText: '+ Add Custom Tag',
-                              hintStyle: TextStyle(color: _palette.textDim),
-                              filled: true,
-                              fillColor: _palette.bgSurface,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            onSubmitted: (val) {
-                              if (val.trim().isNotEmpty) {
-                                setDState(() {
-                                  selectedLabels = MediaLabelService.addLabel(selectedLabels, toTitleCase(val.trim()));
-                                });
-                                tagInputController.clear();
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _palette.bgSurface,
-                            foregroundColor: _palette.accentPrimary,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                          onPressed: () {
-                            if (tagInputController.text.trim().isNotEmpty) {
-                              setDState(() {
-                                selectedLabels = MediaLabelService.addLabel(
-                                  selectedLabels,
-                                  tagInputController.text,
-                                );
-                              });
-                              tagInputController.clear();
-                            }
-                          },
-                          child: const Text('+ Add'),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 12),
                     Text(
                       'Cover Art:',
@@ -1991,7 +2385,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     foregroundColor: Colors.black,
                   ),
                   onPressed: () {
-                    final title = toTitleCase(titleController.text.trim());
+                    final title = toSentenceCase(titleController.text.trim());
                     if (title.isNotEmpty) {
                       final year = int.tryParse(yearController.text) ?? 2024;
                       final total = double.tryParse(totalController.text) ?? 100;
@@ -2016,6 +2410,455 @@ class _HomeScreenState extends State<HomeScreen> {
                     }
                   },
                   child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditMediaDialog(MediaItem item) {
+    final titleController = TextEditingController(text: item.title);
+    final yearController = TextEditingController(text: item.releaseYear.toString());
+    final notesController = TextEditingController(text: item.personalNotes ?? '');
+    final coverUrlController = TextEditingController(text: item.coverUrl ?? '');
+    final currentUnitsController = TextEditingController(
+      text: item.progressCurrent % 1 == 0 ? item.progressCurrent.toInt().toString() : item.progressCurrent.toString(),
+    );
+    final totalCapacityController = TextEditingController(
+      text: item.progressTotal % 1 == 0 ? item.progressTotal.toInt().toString() : item.progressTotal.toString(),
+    );
+    double rating = (item.score ?? 5.0).clamp(1.0, 10.0);
+    bool onHold = item.isOnHold;
+    List<String> labels = List<String>.from(item.labels);
+    String? validationError;
+    bool isSearchingCovers = false;
+    List<CoverSearchResult> candidates = [];
+    String? coverSearchMsg;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dCtx, setDState) {
+            return AlertDialog(
+              backgroundColor: _palette.bgElevated,
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Text('✏️ ', style: TextStyle(fontSize: 16)),
+                      Text(
+                        'Edit Media Item',
+                        style: TextStyle(
+                          color: _palette.textMain,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: _palette.textMuted, size: 20),
+                    onPressed: () => Navigator.pop(dCtx),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (validationError != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0x20EF4444),
+                            border: Border.all(color: const Color(0xFFEF4444)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            validationError!,
+                            style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
+                          ),
+                        ),
+                      ],
+                      // Title
+                      RtlAwareTextField(
+                        controller: titleController,
+                        style: TextStyle(color: _palette.textMain),
+                        decoration: InputDecoration(
+                          labelText: 'Title',
+                          labelStyle: TextStyle(color: _palette.textMuted),
+                          filled: true,
+                          fillColor: _palette.bgSurface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Release Year
+                      TextField(
+                        controller: yearController,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(color: _palette.textMain),
+                        decoration: InputDecoration(
+                          labelText: 'Release Year',
+                          labelStyle: TextStyle(color: _palette.textMuted),
+                          filled: true,
+                          fillColor: _palette.bgSurface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      // Notes / Description
+                      RtlAwareTextField(
+                        controller: notesController,
+                        maxLines: 3,
+                        style: TextStyle(color: _palette.textMain),
+                        decoration: InputDecoration(
+                          labelText: 'Personal Notes & Description',
+                          labelStyle: TextStyle(color: _palette.textMuted),
+                          hintText: '+ Add personal description/notes...',
+                          hintStyle: TextStyle(color: _palette.textDim.withValues(alpha: 0.45)),
+                          filled: true,
+                          fillColor: _palette.bgSurface,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Cover Preview & URL & Auto-fetch
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 60,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: _palette.bgSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: _palette.borderSubtle),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: coverUrlController.text.trim().isNotEmpty
+                                ? SafeCoverImage(url: coverUrlController.text.trim())
+                                : Center(child: Icon(Icons.image, color: _palette.textDim, size: 24)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextField(
+                                  controller: coverUrlController,
+                                  style: TextStyle(color: _palette.textMain, fontSize: 12),
+                                  decoration: InputDecoration(
+                                    labelText: 'Cover Image URL',
+                                    labelStyle: TextStyle(color: _palette.textMuted, fontSize: 11),
+                                    filled: true,
+                                    fillColor: _palette.bgSurface,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  onChanged: (_) => setDState(() {}),
+                                ),
+                                const SizedBox(height: 6),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _palette.bgSurface,
+                                    foregroundColor: _palette.accentPrimary,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  ),
+                                  icon: isSearchingCovers
+                                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                                      : const Icon(Icons.search, size: 14),
+                                  label: Text(
+                                    isSearchingCovers ? 'Searching...' : '🔍 Auto-Fetch Cover',
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                                  onPressed: isSearchingCovers
+                                      ? null
+                                      : () async {
+                                          final query = titleController.text.trim();
+                                          if (query.isEmpty) return;
+                                          setDState(() {
+                                            isSearchingCovers = true;
+                                            coverSearchMsg = null;
+                                          });
+                                          try {
+                                            final results = await CoverFetchService.searchCovers(
+                                              query: query,
+                                              type: item.type,
+                                            );
+                                            setDState(() {
+                                              isSearchingCovers = false;
+                                              candidates = results;
+                                              if (results.isEmpty) {
+                                                coverSearchMsg = 'No covers found for "$query"';
+                                              }
+                                            });
+                                          } catch (_) {
+                                            setDState(() {
+                                              isSearchingCovers = false;
+                                              coverSearchMsg = 'Search failed';
+                                            });
+                                          }
+                                        },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (coverSearchMsg != null) ...[
+                        const SizedBox(height: 6),
+                        Text(coverSearchMsg!, style: TextStyle(color: _palette.textDim, fontSize: 11)),
+                      ],
+                      if (candidates.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text('Select Cover:', style: TextStyle(color: _palette.textMuted, fontSize: 11, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 90,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: candidates.length,
+                            separatorBuilder: (c, i) => const SizedBox(width: 8),
+                            itemBuilder: (c, idx) {
+                              final cand = candidates[idx];
+                              return InkWell(
+                                onTap: () {
+                                  setDState(() {
+                                    coverUrlController.text = cand.coverUrl;
+                                    candidates = [];
+                                  });
+                                },
+                                child: Container(
+                                  width: 65,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: _palette.borderSubtle),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: SafeCoverImage(url: cand.coverUrl),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      // Progress & Capacity
+                      Text(
+                        'Metric: ${item.metricUnit}',
+                        style: TextStyle(
+                          color: _palette.accentPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: currentUnitsController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              style: TextStyle(color: _palette.textMain),
+                              decoration: InputDecoration(
+                                labelText: MediaLedgerCleanupService.currentUnitInputLabelFor(item.type),
+                                labelStyle: TextStyle(color: _palette.textMuted),
+                                filled: true,
+                                fillColor: _palette.bgSurface,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: totalCapacityController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              style: TextStyle(color: _palette.textMain),
+                              decoration: InputDecoration(
+                                labelText: MediaLedgerCleanupService.unitInputLabelFor(item.type),
+                                labelStyle: TextStyle(color: _palette.textMuted),
+                                filled: true,
+                                fillColor: _palette.bgSurface,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Labels picker button
+                      InkWell(
+                        onTap: () {
+                          _showLabelSelectionModal(
+                            context: dCtx,
+                            initialSelected: labels,
+                            onDone: (newLabels) {
+                              setDState(() => labels = newLabels);
+                            },
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _palette.bgSurface,
+                            border: Border.all(color: _palette.borderSubtle),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                labels.isEmpty ? '🏷️ Select Labels / Tags' : '🏷️ Labels (${labels.length}): ${labels.take(3).join(', ')}${labels.length > 3 ? '...' : ''}',
+                                style: TextStyle(
+                                  color: labels.isEmpty ? _palette.textDim : _palette.accentPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Icon(Icons.edit, size: 14, color: _palette.textDim),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Half-Point Rating Slider (1.0 to 10.0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Rating:', style: TextStyle(color: _palette.textMuted, fontSize: 12, fontWeight: FontWeight.bold)),
+                          Text('⭐ ${rating.toStringAsFixed(1)} / 10.0', style: TextStyle(color: _palette.accentPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Slider(
+                        value: rating,
+                        min: 1.0,
+                        max: 10.0,
+                        divisions: 18,
+                        activeColor: _palette.accentPrimary,
+                        inactiveColor: _palette.bgSurface,
+                        label: rating.toStringAsFixed(1),
+                        onChanged: (val) => setDState(() => rating = val),
+                      ),
+                      // On-Hold switch
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text('On Hold', style: TextStyle(color: _palette.textMain, fontSize: 13)),
+                        subtitle: Text(
+                          onHold ? 'Paused progress' : 'Active tracking',
+                          style: TextStyle(color: _palette.textDim, fontSize: 11),
+                        ),
+                        value: onHold,
+                        activeThumbColor: const Color(0xFFF59E0B),
+                        onChanged: (val) => setDState(() => onHold = val),
+                      ),
+                      const SizedBox(height: 8),
+                      // Delete Media Button
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFEF4444),
+                          side: const BorderSide(color: Color(0x66EF4444)),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        label: const Text('Remove Media Item', style: TextStyle(fontSize: 12)),
+                        onPressed: () {
+                          Navigator.pop(dCtx);
+                          _confirmRemoveMedia(item);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dCtx),
+                  child: Text('Cancel', style: TextStyle(color: _palette.textMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _palette.accentPrimary,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    final title = toSentenceCase(titleController.text.trim());
+                    if (title.isEmpty) {
+                      setDState(() => validationError = 'Title cannot be empty');
+                      return;
+                    }
+                    final cur = double.tryParse(currentUnitsController.text.trim());
+                    final tot = double.tryParse(totalCapacityController.text.trim());
+                    if (cur == null || tot == null) {
+                      setDState(() => validationError = 'Progress and capacity must be valid numbers');
+                      return;
+                    }
+                    if (cur < 0 || tot <= 0) {
+                      setDState(() => validationError = 'Values must be positive (capacity > 0)');
+                      return;
+                    }
+                    if (cur > tot) {
+                      setDState(() => validationError = 'Current progress ($cur) cannot exceed total capacity ($tot)');
+                      return;
+                    }
+                    final yr = int.tryParse(yearController.text.trim()) ?? item.releaseYear;
+                    final notes = notesController.text.trim().isEmpty ? null : toSentenceCase(notesController.text.trim());
+                    final cover = coverUrlController.text.trim().isEmpty ? null : coverUrlController.text.trim();
+
+                    final updated = item.copyWith(
+                      title: title,
+                      releaseYear: yr,
+                      personalNotes: notes,
+                      coverUrl: cover,
+                      progressCurrent: cur,
+                      progressTotal: tot,
+                      labels: labels,
+                      score: rating,
+                      isOnHold: onHold,
+                    );
+
+                    setState(() {
+                      final idx = _mediaItems.indexWhere((m) => m.id == item.id);
+                      if (idx != -1) {
+                        _mediaItems[idx] = updated;
+                      }
+                      // Decouple/update linked tasks if title changed
+                      if (title != item.title) {
+                        for (int i = 0; i < _tasks.length; i++) {
+                          if (_tasks[i].linkedMediaId == item.id) {
+                            _tasks[i] = _tasks[i].copyWith(
+                              mediaTitle: title,
+                              title: '🎯 Media Goal: $title',
+                            );
+                          }
+                        }
+                      }
+                    });
+                    widget.storage.saveMediaItems(_mediaItems);
+                    widget.storage.saveTasks(_tasks);
+                    Navigator.pop(dCtx);
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Updated "${updated.title}" successfully'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -2265,18 +3108,24 @@ class _HomeScreenState extends State<HomeScreen> {
     final backlog = _backlogTasks;
     final isViewingToday = DateNavigationService.isToday(_selectedDate);
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        ShamsiAgendaBanner(
-          events: _events,
-          palette: _palette,
-          selectedDate: _selectedDate,
-          onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
-          onToggleCheckpoint: _toggleShamsiCheckpoint,
-          onAddEvent: _addShamsiEvent,
-          onRemoveEvent: _removeShamsiEvent,
-        ),
+    return Listener(
+      onPointerMove: (e) => _lastPointerY = e.position.dy,
+      onPointerUp: (_) => _stopAutoScrollTimer(),
+      onPointerCancel: (_) => _stopAutoScrollTimer(),
+      child: ListView(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(16),
+        children: [
+          ShamsiAgendaBanner(
+            events: _events,
+            palette: _palette,
+            selectedDate: _selectedDate,
+            onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
+            onToggleCheckpoint: _toggleShamsiCheckpoint,
+            onAddEvent: _addShamsiEvent,
+            onAddCustomEvent: _showAddCustomEventDialog,
+            onRemoveEvent: _removeShamsiEvent,
+          ),
         const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2353,8 +3202,14 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             itemCount: daily.length,
+            onReorderStart: (_) {
+              _isDraggingTask = true;
+              _startAutoScrollTimer();
+            },
             // ignore: deprecated_member_use
             onReorder: (oldIndex, newIndex) {
+              _isDraggingTask = false;
+              _stopAutoScrollTimer();
               setState(() {
                 final reordered =
                     ReorderService.reorderTasks(daily, oldIndex, newIndex);
@@ -2378,6 +3233,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPostponeOneDay: () => _postponeTaskOneDay(task),
                 onPostponeToDate: () => _showPostponeDatePickerModal(task),
                 onDemoteToBacklog: () => _demoteTaskToBacklog(task),
+                onEdit: () => _showEditTaskDialog(task),
                 onDelete: () => _deleteTask(task),
               );
             },
@@ -2449,8 +3305,14 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             itemCount: backlog.length,
+            onReorderStart: (_) {
+              _isDraggingTask = true;
+              _startAutoScrollTimer();
+            },
             // ignore: deprecated_member_use
             onReorder: (oldIndex, newIndex) {
+              _isDraggingTask = false;
+              _stopAutoScrollTimer();
               setState(() {
                 final reordered =
                     ReorderService.reorderTasks(backlog, oldIndex, newIndex);
@@ -2475,13 +3337,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 onScheduleForDate: () => _assignTaskToToday(task),
                 scheduleLabel:
                     isViewingToday ? '⚡ Assign Today' : '📅 Assign to Day',
+                onEdit: () => _showEditTaskDialog(task),
                 onDelete: () => _deleteTask(task),
               );
             },
           ),
       ],
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildEntertainmentView() {
     final mediaList = _filteredMediaItems;
@@ -2683,6 +3547,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onScheduleToday: () => _scheduleMediaToday(item),
                 onEditNotes: () => _editMediaNotes(item),
                 onEditLabels: () => _showEditLabelsDialog(item),
+                onEditMedia: () => _showEditMediaDialog(item),
                 onDelete: () => _removeMediaItem(item.id),
               );
             },
@@ -2700,6 +3565,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onScheduleToday: () => _scheduleMediaToday(item),
               onEditNotes: () => _editMediaNotes(item),
               onEditLabels: () => _showEditLabelsDialog(item),
+              onEditMedia: () => _showEditMediaDialog(item),
               onDelete: () => _removeMediaItem(item.id),
             );
           }),

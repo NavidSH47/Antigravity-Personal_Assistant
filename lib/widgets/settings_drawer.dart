@@ -201,8 +201,6 @@ class SettingsDrawer extends StatelessWidget {
                         desc = 'Code & terminal look';
                       } else if (font == AppFontStyle.editorialSerif) {
                         desc = 'Bookish elegance';
-                      } else if (font == AppFontStyle.vazirmatn) {
-                        desc = 'Persian typography';
                       }
 
                       return InkWell(

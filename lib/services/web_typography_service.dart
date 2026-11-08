@@ -4,7 +4,6 @@ import '../theme/app_theme.dart';
 /// Service for verifying and managing web typography and dynamic font switching.
 class WebTypographyService {
   static const List<String> configuredWebFonts = [
-    'Vazirmatn',
     'Comic Neue',
     'Quicksand',
     'Fira Code',
@@ -12,7 +11,7 @@ class WebTypographyService {
   ];
 
   static const String googleFontsCssUrl =
-      'https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Fira+Code:wght@400;600;700&family=Lora:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Vazirmatn:wght@300;400;500;700;900&display=swap';
+      'https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Fira+Code:wght@400;600;700&family=Lora:wght@400;600;700&family=Quicksand:wght@400;600;700&display=swap';
 
   /// Returns the effective primary font family name for CSS / Canvas rendering.
   static String getEffectiveFontFamily(AppFontStyle font) {

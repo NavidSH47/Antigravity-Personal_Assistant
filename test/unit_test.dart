@@ -23,6 +23,7 @@ import 'package:nsh_assistant/services/title_case_service.dart';
 import 'package:nsh_assistant/widgets/safe_cover_image.dart';
 import 'package:nsh_assistant/widgets/shamsi_agenda_banner.dart';
 import 'package:nsh_assistant/widgets/media_card.dart';
+import 'package:nsh_assistant/services/rtl_detection_service.dart';
 
 void main() {
   group('Task Model & 3-State Transitions', () {
@@ -339,21 +340,21 @@ void main() {
   });
 
   group('7. WebTypographyService & Font Switching (Task 1)', () {
-    test('Configured web fonts list contains all required font families', () {
-      expect(WebTypographyService.configuredWebFonts, contains('Vazirmatn'));
+    test('Configured web fonts list contains all required font families (Vazirmatn eliminated)', () {
+      expect(WebTypographyService.configuredWebFonts.contains('Vazirmatn'), isFalse);
       expect(WebTypographyService.configuredWebFonts, contains('Comic Neue'));
       expect(WebTypographyService.configuredWebFonts, contains('Quicksand'));
       expect(WebTypographyService.configuredWebFonts, contains('Fira Code'));
       expect(WebTypographyService.configuredWebFonts, contains('Lora'));
     });
 
-    test('Google Fonts CSS URL contains all web font families', () {
+    test('Google Fonts CSS URL contains all web font families without Vazirmatn', () {
       final url = WebTypographyService.googleFontsCssUrl;
-      expect(url.contains('Vazirmatn'), true);
-      expect(url.contains('Comic+Neue'), true);
-      expect(url.contains('Quicksand'), true);
-      expect(url.contains('Fira+Code'), true);
-      expect(url.contains('Lora'), true);
+      expect(url.contains('Vazirmatn'), isFalse);
+      expect(url.contains('Comic+Neue'), isTrue);
+      expect(url.contains('Quicksand'), isTrue);
+      expect(url.contains('Fira+Code'), isTrue);
+      expect(url.contains('Lora'), isTrue);
     });
 
     test('verifyFontResolution returns true for all AppFontStyle variants', () {
@@ -925,22 +926,26 @@ void main() {
     });
   });
 
-  group('14. Title Case Input Formatting (Task 4)', () {
-    test('toTitleCase capitalizes first letter of every word correctly', () {
-      expect(toTitleCase('hello world'), 'Hello World');
-      expect(toTitleCase('dune: part two'), 'Dune: Part Two');
-      expect(toTitleCase('spider-man: miles morales'), 'Spider-Man: Miles Morales');
-      expect(toTitleCase('123 start action'), '123 Start Action');
-      expect(toTitleCase(''), '');
-      expect(toTitleCase('کتاب فارسی'), 'کتاب فارسی');
+  group('14. Universal Sentence Case Input Standard (Task 4)', () {
+    test('toSentenceCase capitalizes first letter of sentence and trims appropriately', () {
+      expect(toSentenceCase('hello world'), 'Hello world');
+      expect(toSentenceCase('dune: part two'), 'Dune: part two');
+      expect(toSentenceCase('spider-man: miles morales'), 'Spider-man: miles morales');
+      expect(toSentenceCase('123 start action'), '123 start action');
+      expect(toSentenceCase(''), '');
+      expect(toSentenceCase('کتاب فارسی'), 'کتاب فارسی');
     });
 
-    test('TitleCaseTextInputFormatter preserves text selection position', () {
-      final formatter = TitleCaseTextInputFormatter();
+    test('toTitleCase legacy alias delegates to sentence case', () {
+      expect(toTitleCase('hello world'), 'Hello world');
+    });
+
+    test('SentenceCaseTextInputFormatter capitalizes first letter and preserves selection', () {
+      final formatter = SentenceCaseTextInputFormatter();
       const oldValue = TextEditingValue(text: 'read dun', selection: TextSelection.collapsed(offset: 8));
       const newValue = TextEditingValue(text: 'read dune', selection: TextSelection.collapsed(offset: 9));
       final result = formatter.formatEditUpdate(oldValue, newValue);
-      expect(result.text, 'Read Dune');
+      expect(result.text, 'Read dune');
       expect(result.selection.baseOffset, 9);
     });
   });
@@ -1035,10 +1040,11 @@ void main() {
     });
   });
 
-  group('18. Tomorrow Button Tooltip & Long Press Decoupling', () {
-    testWidgets('Tomorrow button shows Tooltip without triggering postpone modal on long press', (tester) async {
+  group('18. Tomorrow Button Tooltip & Long Press Sub-Menu (Task 3)', () {
+    testWidgets('Tomorrow button triggers postpone on tap and date picker sub-menu on long press', (tester) async {
       final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
       bool postponeToDateTriggered = false;
+      bool postponeOneDayTriggered = false;
 
       final task = Task(
         id: 't1',
@@ -1053,6 +1059,7 @@ void main() {
               task: task,
               palette: palette,
               onStatusChange: (_) {},
+              onPostponeOneDay: () => postponeOneDayTriggered = true,
               onPostponeToDate: () => postponeToDateTriggered = true,
             ),
           ),
@@ -1063,18 +1070,21 @@ void main() {
       final tomorrowFinder = find.text('Tomorrow');
       expect(tomorrowFinder, findsOneWidget);
 
-      // Long press the button
+      // Quick tap triggers onPostponeOneDay
+      await tester.tap(tomorrowFinder);
+      await tester.pumpAndSettle();
+      expect(postponeOneDayTriggered, isTrue);
+
+      // Long press triggers onPostponeToDate (sub-menu)
       await tester.longPress(tomorrowFinder);
       await tester.pumpAndSettle();
+      expect(postponeToDateTriggered, isTrue);
 
-      // onPostponeToDate should NOT be called on long press!
-      expect(postponeToDateTriggered, isFalse);
-
-      // Tooltip should be present
+      // Tooltip should be present with instructional text
       final tooltip = tester.widget<Tooltip>(
         find.ancestor(of: tomorrowFinder, matching: find.byType(Tooltip)),
       );
-      expect(tooltip.message, 'Postpone task to tomorrow (+1 day)');
+      expect(tooltip.message, 'Tap: Tomorrow (+1 day) • Hold: Pick Shamsi date');
     });
   });
 
@@ -1116,6 +1126,202 @@ void main() {
       expect(find.text('📝 "Finished Phantom Liberty expansion."'), findsOneWidget);
       expect(find.text('+ Update'), findsOneWidget);
       expect(find.text('Schedule Today'), findsOneWidget);
+    });
+  });
+
+  group('20. Version 2.3.0 SDD Verification Suite', () {
+    test('Font elimination: Vazirmatn completely removed from AppFontStyle and theme fallbacks', () {
+      final styleNames = AppFontStyle.values.map((e) => e.name).toList();
+      expect(styleNames.contains('vazirmatn'), isFalse);
+      expect(AppTheme.getFontFamilyName(AppFontStyle.defaultSans), 'sans-serif');
+      expect(AppTheme.getFontFallbackList(AppFontStyle.defaultSans), contains('sans-serif'));
+    });
+
+    test('Universal Sentence Case Input Standard: toSentenceCase and Formatter', () {
+      expect(toSentenceCase('complete the remaining tasks in SDD'), 'Complete the remaining tasks in SDD');
+      expect(toSentenceCase('   flutter 3.13.7 release   '), '   Flutter 3.13.7 release   ');
+      expect(toSentenceCase(''), '');
+      expect(toSentenceCase('123 numeric start'), '123 numeric start');
+
+      final formatter = SentenceCaseTextInputFormatter();
+      const oldVal = TextEditingValue(text: 'buy mi', selection: TextSelection.collapsed(offset: 6));
+      const newVal = TextEditingValue(text: 'buy milk', selection: TextSelection.collapsed(offset: 8));
+      final res = formatter.formatEditUpdate(oldVal, newVal);
+      expect(res.text, 'Buy milk');
+      expect(res.selection.baseOffset, 8);
+    });
+
+    test('Custom Event Restoration: ShamsiEvent birthday vs custom event serialization', () {
+      final bday = ShamsiEvent(
+        id: 'ev-bday',
+        title: 'Navid Birthday',
+        jalaliMonth: 1,
+        jalaliDay: 15,
+        category: EventCategory.birthday,
+        isCustom: true,
+      );
+      expect(bday.category, EventCategory.birthday);
+      expect(bday.isCustom, isTrue);
+
+      final jsonBday = bday.toJson();
+      final revivedBday = ShamsiEvent.fromJson(jsonBday);
+      expect(revivedBday.title, 'Navid Birthday');
+      expect(revivedBday.category, EventCategory.birthday);
+      expect(revivedBday.isCustom, isTrue);
+
+      final customEvent = ShamsiEvent(
+        id: 'ev-custom',
+        title: 'Project Deadline',
+        jalaliMonth: 2,
+        jalaliDay: 20,
+        category: EventCategory.customDate,
+        isCustom: true,
+      );
+      expect(customEvent.category, EventCategory.customDate);
+      expect(customEvent.isCustom, isTrue);
+
+      final jsonCustom = customEvent.toJson();
+      final revivedCustom = ShamsiEvent.fromJson(jsonCustom);
+      expect(revivedCustom.category, EventCategory.customDate);
+    });
+
+    test('Theme Palettes Revitalization: Persian Turquoise & Differentiated Purple Vibes', () {
+      // Renamed palette
+      expect(AppTheme.vibes.containsKey(ThemeVibe.persianTurquoise), isTrue);
+      final turquoise = AppTheme.vibes[ThemeVibe.persianTurquoise]!;
+      expect(turquoise.label, 'Persian Turquoise');
+
+      // 4 Purple Palettes strictly differentiated
+      final amethyst = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final lavender = AppTheme.vibes[ThemeVibe.electricLavender]!;
+      final purpleGold = AppTheme.vibes[ThemeVibe.imperialGold]!;
+      final purpleOrange = AppTheme.vibes[ThemeVibe.purpleOrange]!;
+
+      expect(amethyst.accentPrimary, const Color(0xFFA855F7));
+      expect(amethyst.bgCanvas, const Color(0xFF0E0616));
+
+      expect(lavender.accentPrimary, const Color(0xFFE9D5FF));
+      expect(lavender.bgCanvas, const Color(0xFF0A0B1A));
+
+      expect(purpleGold.accentPrimary, const Color(0xFFF59E0B));
+      expect(purpleGold.bgCanvas, const Color(0xFF08040C));
+
+      expect(purpleOrange.accentPrimary, const Color(0xFFFF6B00));
+      expect(purpleOrange.bgCanvas, const Color(0xFF12061A));
+
+      // Revitalized bland palettes
+      final emerald = AppTheme.vibes[ThemeVibe.emeraldCyan]!;
+      expect(emerald.accentPrimary, const Color(0xFF10B981));
+
+      final arctic = AppTheme.vibes[ThemeVibe.arcticFrost]!;
+      expect(arctic.accentPrimary, const Color(0xFF7DD3FC));
+    });
+
+    test('Native Persian RTL Auto-Detection: RtlDetectionService', () {
+      expect(RtlDetectionService.startsWithRtl('سلام'), isTrue);
+      expect(RtlDetectionService.startsWithRtl('پروژه جدید'), isTrue);
+      expect(RtlDetectionService.startsWithRtl('Hello'), isFalse);
+      expect(RtlDetectionService.startsWithRtl('123 Persian'), isFalse);
+
+      expect(RtlDetectionService.resolveDirection('تسک امروز'), TextDirection.rtl);
+      expect(RtlDetectionService.resolveDirection('Daily Task'), TextDirection.ltr);
+
+      expect(RtlDetectionService.resolveAlignment('تسک فارسی'), TextAlign.right);
+      expect(RtlDetectionService.resolveAlignment('English Task'), TextAlign.left);
+    });
+
+    test('Persistent Cover Art Disk Cache: SafeCoverImage CORS proxy and sanitizeUrl work correctly', () {
+      const bad = 'https://images.launchbox-app.com//img.png';
+      expect(SafeCoverImage.sanitizeUrl(bad), 'https://images.launchbox-app.com/img.png');
+      expect(SafeCoverImage.toCorsProxyUrl('https://example.com/cover.jpg'), startsWith('https://images.weserv.nl/?url='));
+    });
+
+    testWidgets('3-Second Hold to Edit Task Card: onEdit callback triggered on long press', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final task = Task(id: 't-edit', title: 'Editable Task', notes: 'Has notes');
+      bool editTriggered = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              onStatusChange: (_) {},
+              onEdit: () => editTriggered = true,
+            ),
+          ),
+        ),
+      );
+
+      final cardFinder = find.text('Editable Task');
+      expect(cardFinder, findsOneWidget);
+
+      await tester.longPress(cardFinder);
+      await tester.pumpAndSettle();
+
+      expect(editTriggered, isTrue);
+    });
+
+    testWidgets('Compact Mini-Tasks: Renders compact layout when task notes are empty', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final miniTask = Task(id: 't-mini', title: 'Mini Task', notes: '');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: miniTask,
+              palette: palette,
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Mini Task'), findsOneWidget);
+      // Ensure no notes block is rendered
+      expect(find.byIcon(Icons.notes), findsNothing);
+    });
+
+    testWidgets('3-Second Hold to Edit Media Card: onEditMedia callback triggered on long press', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final item = MediaItem(
+        id: 'm-edit',
+        type: MediaType.book,
+        title: 'Project Hail Mary',
+        releaseYear: 2021,
+        progressCurrent: 120,
+        progressTotal: 496,
+      );
+      bool editMediaTriggered = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: item,
+              palette: palette,
+              isGrid: false,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+              onEditMedia: () => editMediaTriggered = true,
+            ),
+          ),
+        ),
+      );
+
+      final mediaTitleFinder = find.text('Project Hail Mary');
+      expect(mediaTitleFinder, findsOneWidget);
+
+      await tester.longPress(mediaTitleFinder);
+      await tester.pumpAndSettle();
+
+      expect(editMediaTriggered, isTrue);
     });
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/media_item.dart';
 import '../theme/app_theme.dart';
 import 'safe_cover_image.dart';
@@ -13,6 +14,7 @@ class MediaCard extends StatelessWidget {
   final VoidCallback onScheduleToday;
   final VoidCallback onEditNotes;
   final VoidCallback onEditLabels;
+  final VoidCallback? onEditMedia;
   final VoidCallback? onDelete;
 
   const MediaCard({
@@ -26,6 +28,7 @@ class MediaCard extends StatelessWidget {
     required this.onScheduleToday,
     required this.onEditNotes,
     required this.onEditLabels,
+    this.onEditMedia,
     this.onDelete,
   });
 
@@ -39,22 +42,27 @@ class MediaCard extends StatelessWidget {
 
   // --- LIST VIEW CARD (Separated Top & Bottom Layout) ---
   Widget _buildListCard(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: palette.bgElevated,
-        border: Border.all(
-          color: item.isOnHold
-              ? const Color(0x66F59E0B)
-              : palette.borderSubtle,
-          width: item.isOnHold ? 1.5 : 1.0,
+    return GestureDetector(
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        onEditMedia?.call();
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: palette.bgElevated,
+          border: Border.all(
+            color: item.isOnHold
+                ? const Color(0x66F59E0B)
+                : palette.borderSubtle,
+            width: item.isOnHold ? 1.5 : 1.0,
+          ),
+          borderRadius: BorderRadius.circular(16),
         ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
           // TOP SECTION: Cover on left, Title & Year & Delete & Labels on right
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -166,7 +174,7 @@ class MediaCard extends StatelessWidget {
                                 '🏷️ + Add labels...',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: palette.textDim,
+                                  color: palette.textDim.withValues(alpha: 0.45),
                                   fontStyle: FontStyle.italic,
                                 ),
                               ),
@@ -211,7 +219,7 @@ class MediaCard extends StatelessWidget {
                   color: item.personalNotes != null &&
                           item.personalNotes!.isNotEmpty
                       ? palette.textMuted
-                      : palette.textDim,
+                      : palette.textDim.withValues(alpha: 0.45),
                 ),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
@@ -338,23 +346,29 @@ class MediaCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   // --- GRID VIEW CARD (2-Column Poster-first) ---
   Widget _buildGridCard(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: palette.bgElevated,
-        border: Border.all(
-          color: item.isOnHold
-              ? const Color(0x66F59E0B)
-              : palette.borderSubtle,
+    return GestureDetector(
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        onEditMedia?.call();
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: palette.bgElevated,
+          border: Border.all(
+            color: item.isOnHold
+                ? const Color(0x66F59E0B)
+                : palette.borderSubtle,
+          ),
+          borderRadius: BorderRadius.circular(16),
         ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.all(10),
-      child: Column(
+        padding: const EdgeInsets.all(10),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Poster Cover Box on top
@@ -523,7 +537,8 @@ class MediaCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildCoverBox({required double width, required double height}) {

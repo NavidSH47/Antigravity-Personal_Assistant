@@ -20,7 +20,6 @@ enum AppFontStyle {
   roundedBold,
   techMono,
   editorialSerif,
-  vazirmatn,
 }
 
 class VibePalette {
@@ -59,107 +58,107 @@ class AppTheme {
   static const Map<ThemeVibe, VibePalette> vibes = {
     ThemeVibe.deepAmethyst: VibePalette(
       label: 'Deep Amethyst',
-      bgCanvas: Color(0xFF0C0714),
-      bgSurface: Color(0xFF150D22),
-      bgElevated: Color(0xFF221537),
-      borderSubtle: Color(0x26A855F7),
-      borderFocus: Color(0x59C084FC),
-      textMain: Color(0xFFF0F6FC),
-      textMuted: Color(0xFFC084FC),
+      bgCanvas: Color(0xFF0E0616),
+      bgSurface: Color(0xFF180B26),
+      bgElevated: Color(0xFF25123A),
+      borderSubtle: Color(0x30A855F7),
+      borderFocus: Color(0x73A855F7),
+      textMain: Color(0xFFFAF5FF),
+      textMuted: Color(0xFFD8B4FE),
       textDim: Color(0xFF9333EA),
       accentPrimary: Color(0xFFA855F7),
       accentGradient: LinearGradient(
-        colors: [Color(0xFF9333EA), Color(0xFFC084FC)],
+        colors: [Color(0xFF7E22CE), Color(0xFFA855F7), Color(0xFFC084FC)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       accentGlow: Color(0x59A855F7),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFF9333EA), Color(0xFFC084FC)],
+        colors: [Color(0xFF7E22CE), Color(0xFFA855F7), Color(0xFFC084FC)],
       ),
     ),
     ThemeVibe.electricLavender: VibePalette(
       label: 'Deep Lavender',
-      bgCanvas: Color(0xFF07030E),
-      bgSurface: Color(0xFF10061E),
-      bgElevated: Color(0xFF1C0C33),
+      bgCanvas: Color(0xFF0A0B1A),
+      bgSurface: Color(0xFF12142B),
+      bgElevated: Color(0xFF1C1E3F),
       borderSubtle: Color(0x30E9D5FF),
       borderFocus: Color(0x73E9D5FF),
       textMain: Color(0xFFFAF5FF),
-      textMuted: Color(0xFFD8B4FE),
-      textDim: Color(0xFFA855F7),
+      textMuted: Color(0xFFDDD6FE),
+      textDim: Color(0xFFA78BFA),
       accentPrimary: Color(0xFFE9D5FF),
       accentGradient: LinearGradient(
-        colors: [Color(0xFFA855F7), Color(0xFFC084FC), Color(0xFFFFFFFF)],
+        colors: [Color(0xFF818CF8), Color(0xFFC084FC), Color(0xFFE9D5FF)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      accentGlow: Color(0x66E9D5FF),
+      accentGlow: Color(0x59E9D5FF),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFFA855F7), Color(0xFFFFFFFF)],
+        colors: [Color(0xFF818CF8), Color(0xFFC084FC), Color(0xFFE9D5FF)],
       ),
     ),
     ThemeVibe.imperialGold: VibePalette(
       label: 'Purple & Gold',
-      bgCanvas: Color(0xFF080311),
-      bgSurface: Color(0xFF130822),
-      bgElevated: Color(0xFF1F0F35),
-      borderSubtle: Color(0x33FBBF24),
-      borderFocus: Color(0x73FBBF24),
+      bgCanvas: Color(0xFF08040C),
+      bgSurface: Color(0xFF140A1E),
+      bgElevated: Color(0xFF211030),
+      borderSubtle: Color(0x30F59E0B),
+      borderFocus: Color(0x73F59E0B),
       textMain: Color(0xFFFEFCE8),
-      textMuted: Color(0xFFE9D5FF),
-      textDim: Color(0xFFA855F7),
-      accentPrimary: Color(0xFFFBBF24),
+      textMuted: Color(0xFFFDE68A),
+      textDim: Color(0xFFD97706),
+      accentPrimary: Color(0xFFF59E0B),
       accentGradient: LinearGradient(
-        colors: [Color(0xFF9333EA), Color(0xFFF59E0B), Color(0xFFFDE047)],
+        colors: [Color(0xFFD97706), Color(0xFFF59E0B), Color(0xFFFDE047)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      accentGlow: Color(0x66FBBF24),
+      accentGlow: Color(0x59F59E0B),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFF9333EA), Color(0xFFFBBF24)],
+        colors: [Color(0xFFD97706), Color(0xFFF59E0B), Color(0xFFFDE047)],
       ),
     ),
     ThemeVibe.purpleOrange: VibePalette(
       label: 'Purple & Orange',
-      bgCanvas: Color(0xFF090412),
-      bgSurface: Color(0xFF140A22),
-      bgElevated: Color(0xFF201135),
-      borderSubtle: Color(0x33F97316),
-      borderFocus: Color(0x73A855F7),
+      bgCanvas: Color(0xFF12061A),
+      bgSurface: Color(0xFF1F0A2C),
+      bgElevated: Color(0xFF2F1042),
+      borderSubtle: Color(0x30FF6B00),
+      borderFocus: Color(0x73FF6B00),
       textMain: Color(0xFFFFF7ED),
-      textMuted: Color(0xFFC084FC),
-      textDim: Color(0xFF7C3AED),
-      accentPrimary: Color(0xFFF97316),
+      textMuted: Color(0xFFFED7AA),
+      textDim: Color(0xFFEA580C),
+      accentPrimary: Color(0xFFFF6B00),
       accentGradient: LinearGradient(
-        colors: [Color(0xFF9333EA), Color(0xFFF97316)],
+        colors: [Color(0xFF9333EA), Color(0xFFFF6B00), Color(0xFFFFAA00)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      accentGlow: Color(0x60F97316),
+      accentGlow: Color(0x59FF6B00),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFF9333EA), Color(0xFFF97316)],
+        colors: [Color(0xFF9333EA), Color(0xFFFF6B00), Color(0xFFFFAA00)],
       ),
     ),
     ThemeVibe.cyberViolet: VibePalette(
       label: 'Cyber Violet',
-      bgCanvas: Color(0xFF100D1A),
-      bgSurface: Color(0xFF191428),
-      bgElevated: Color(0xFF241D39),
-      borderSubtle: Color(0x1FFFFFFF),
-      borderFocus: Color(0x408B5CF6),
-      textMain: Color(0xFFF0F6FC),
-      textMuted: Color(0xFF8B949E),
-      textDim: Color(0xFF6E7681),
-      accentPrimary: Color(0xFF8B5CF6),
+      bgCanvas: Color(0xFF0D071E),
+      bgSurface: Color(0xFF170D31),
+      bgElevated: Color(0xFF231448),
+      borderSubtle: Color(0x30D946EF),
+      borderFocus: Color(0x73D946EF),
+      textMain: Color(0xFFFAF5FF),
+      textMuted: Color(0xFFF0ABFC),
+      textDim: Color(0xFFA21CAF),
+      accentPrimary: Color(0xFFD946EF),
       accentGradient: LinearGradient(
-        colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+        colors: [Color(0xFFA855F7), Color(0xFFD946EF), Color(0xFF06B6D4)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      accentGlow: Color(0x408B5CF6),
+      accentGlow: Color(0x59D946EF),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
+        colors: [Color(0xFFA855F7), Color(0xFFD946EF), Color(0xFF06B6D4)],
       ),
     ),
     ThemeVibe.solarTangerine: VibePalette(
@@ -185,107 +184,107 @@ class AppTheme {
     ),
     ThemeVibe.sunsetAmber: VibePalette(
       label: 'Sunset Amber',
-      bgCanvas: Color(0xFF15110D),
-      bgSurface: Color(0xFF221A14),
-      bgElevated: Color(0xFF31261D),
-      borderSubtle: Color(0x1FFFFFFF),
-      borderFocus: Color(0x40F97316),
-      textMain: Color(0xFFF0F6FC),
-      textMuted: Color(0xFF8B949E),
-      textDim: Color(0xFF6E7681),
+      bgCanvas: Color(0xFF180D0B),
+      bgSurface: Color(0xFF251512),
+      bgElevated: Color(0xFF351E1A),
+      borderSubtle: Color(0x30F97316),
+      borderFocus: Color(0x73F97316),
+      textMain: Color(0xFFFFF7ED),
+      textMuted: Color(0xFFFDBA74),
+      textDim: Color(0xFFC2410C),
       accentPrimary: Color(0xFFF97316),
       accentGradient: LinearGradient(
-        colors: [Color(0xFFF97316), Color(0xFFF43F5E)],
+        colors: [Color(0xFFEA580C), Color(0xFFF97316), Color(0xFFFB7185)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
-      accentGlow: Color(0x40F97316),
+      accentGlow: Color(0x59F97316),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFFF97316), Color(0xFFF43F5E)],
+        colors: [Color(0xFFEA580C), Color(0xFFF97316), Color(0xFFFB7185)],
       ),
     ),
     ThemeVibe.arcticFrost: VibePalette(
       label: 'Arctic Frost',
-      bgCanvas: Color(0xFF090E17),
-      bgSurface: Color(0xFF101926),
-      bgElevated: Color(0xFF182538),
-      borderSubtle: Color(0x24E0F2FE),
-      borderFocus: Color(0x59E0F2FE),
+      bgCanvas: Color(0xFF070F1E),
+      bgSurface: Color(0xFF0D192E),
+      bgElevated: Color(0xFF152542),
+      borderSubtle: Color(0x307DD3FC),
+      borderFocus: Color(0x737DD3FC),
       textMain: Color(0xFFF8FAFC),
-      textMuted: Color(0xFF94A3B8),
-      textDim: Color(0xFF64748B),
+      textMuted: Color(0xFFBAE6FD),
+      textDim: Color(0xFF0284C7),
+      accentPrimary: Color(0xFF7DD3FC),
+      accentGradient: LinearGradient(
+        colors: [Color(0xFFE0F2FE), Color(0xFF7DD3FC), Color(0xFF38BDF8)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      accentGlow: Color(0x597DD3FC),
+      sampleGradient: LinearGradient(
+        colors: [Color(0xFFE0F2FE), Color(0xFF7DD3FC), Color(0xFF38BDF8)],
+      ),
+    ),
+    ThemeVibe.persianTurquoise: VibePalette(
+      label: 'Persian Turquoise',
+      bgCanvas: Color(0xFF091319),
+      bgSurface: Color(0xFF0F1F28),
+      bgElevated: Color(0xFF162D3A),
+      borderSubtle: Color(0x2600BCD4),
+      borderFocus: Color(0x5900BCD4),
+      textMain: Color(0xFFF0F6FC),
+      textMuted: Color(0xFF80DEEA),
+      textDim: Color(0xFF00838F),
+      accentPrimary: Color(0xFF00BCD4),
+      accentGradient: LinearGradient(
+        colors: [Color(0xFF00E5FF), Color(0xFF00BCD4), Color(0xFF4DD0E1)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      accentGlow: Color(0x5900BCD4),
+      sampleGradient: LinearGradient(
+        colors: [Color(0xFF00E5FF), Color(0xFF00BCD4)],
+      ),
+    ),
+    ThemeVibe.emeraldCyan: VibePalette(
+      label: 'Emerald Cyan',
+      bgCanvas: Color(0xFF051311),
+      bgSurface: Color(0xFF0B201D),
+      bgElevated: Color(0xFF13302C),
+      borderSubtle: Color(0x3010B981),
+      borderFocus: Color(0x7310B981),
+      textMain: Color(0xFFF0FDF4),
+      textMuted: Color(0xFF6EE7B7),
+      textDim: Color(0xFF059669),
+      accentPrimary: Color(0xFF10B981),
+      accentGradient: LinearGradient(
+        colors: [Color(0xFF059669), Color(0xFF10B981), Color(0xFF06B6D4)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      accentGlow: Color(0x5910B981),
+      sampleGradient: LinearGradient(
+        colors: [Color(0xFF059669), Color(0xFF10B981), Color(0xFF06B6D4)],
+      ),
+    ),
+    ThemeVibe.minimalNordic: VibePalette(
+      label: 'Nordic Slate',
+      bgCanvas: Color(0xFF0E1318),
+      bgSurface: Color(0xFF151D24),
+      bgElevated: Color(0xFF1E2832),
+      borderSubtle: Color(0x3038BDF8),
+      borderFocus: Color(0x7338BDF8),
+      textMain: Color(0xFFF0F9FF),
+      textMuted: Color(0xFF7DD3FC),
+      textDim: Color(0xFF0284C7),
       accentPrimary: Color(0xFF38BDF8),
       accentGradient: LinearGradient(
-        colors: [Color(0xFFF0F9FF), Color(0xFF38BDF8), Color(0xFF818CF8)],
+        colors: [Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFC084FC)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
       accentGlow: Color(0x5938BDF8),
       sampleGradient: LinearGradient(
-        colors: [Color(0xFFF0F9FF), Color(0xFF38BDF8)],
-      ),
-    ),
-    ThemeVibe.persianTurquoise: VibePalette(
-      label: 'Isfahan Cyan',
-      bgCanvas: Color(0xFF091319),
-      bgSurface: Color(0xFF0F1F28),
-      bgElevated: Color(0xFF162D3A),
-      borderSubtle: Color(0x1FFFFFFF),
-      borderFocus: Color(0x4000E5FF),
-      textMain: Color(0xFFF0F6FC),
-      textMuted: Color(0xFF8B949E),
-      textDim: Color(0xFF6E7681),
-      accentPrimary: Color(0xFF00BCD4),
-      accentGradient: LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFFFF6B8B)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      accentGlow: Color(0x4000E5FF),
-      sampleGradient: LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFFFF6B8B)],
-      ),
-    ),
-    ThemeVibe.emeraldCyan: VibePalette(
-      label: 'Emerald Cyan',
-      bgCanvas: Color(0xFF0D1314),
-      bgSurface: Color(0xFF141F21),
-      bgElevated: Color(0xFF1E2E31),
-      borderSubtle: Color(0x1FFFFFFF),
-      borderFocus: Color(0x4010B981),
-      textMain: Color(0xFFF0F6FC),
-      textMuted: Color(0xFF8B949E),
-      textDim: Color(0xFF6E7681),
-      accentPrimary: Color(0xFF10B981),
-      accentGradient: LinearGradient(
-        colors: [Color(0xFF10B981), Color(0xFF06B6D4)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      accentGlow: Color(0x4010B981),
-      sampleGradient: LinearGradient(
-        colors: [Color(0xFF10B981), Color(0xFF06B6D4)],
-      ),
-    ),
-    ThemeVibe.minimalNordic: VibePalette(
-      label: 'Nordic Slate',
-      bgCanvas: Color(0xFF121417),
-      bgSurface: Color(0xFF1B1E23),
-      bgElevated: Color(0xFF262A32),
-      borderSubtle: Color(0x1FFFFFFF),
-      borderFocus: Color(0x4060A5FA),
-      textMain: Color(0xFFF0F6FC),
-      textMuted: Color(0xFF8B949E),
-      textDim: Color(0xFF6E7681),
-      accentPrimary: Color(0xFF60A5FA),
-      accentGradient: LinearGradient(
-        colors: [Color(0xFF60A5FA), Color(0xFFA78BFA)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      accentGlow: Color(0x4060A5FA),
-      sampleGradient: LinearGradient(
-        colors: [Color(0xFF60A5FA), Color(0xFFA78BFA)],
+        colors: [Color(0xFF38BDF8), Color(0xFF818CF8), Color(0xFFC084FC)],
       ),
     ),
   };
@@ -293,7 +292,7 @@ class AppTheme {
   static String getFontFamilyName(AppFontStyle font) {
     switch (font) {
       case AppFontStyle.defaultSans:
-        return 'Vazirmatn';
+        return 'sans-serif';
       case AppFontStyle.comicSans:
         return 'Comic Neue';
       case AppFontStyle.roundedBold:
@@ -302,8 +301,6 @@ class AppTheme {
         return 'Fira Code';
       case AppFontStyle.editorialSerif:
         return 'Lora';
-      case AppFontStyle.vazirmatn:
-        return 'Vazirmatn';
     }
   }
 
@@ -319,25 +316,21 @@ class AppTheme {
         return 'Tech Mono';
       case AppFontStyle.editorialSerif:
         return 'Editorial Serif';
-      case AppFontStyle.vazirmatn:
-        return 'Vazirmatn (وزیر)';
     }
   }
 
   static List<String> getFontFallbackList(AppFontStyle font) {
     switch (font) {
       case AppFontStyle.comicSans:
-        return ['Comic Neue', 'Comic Sans MS', 'Comic Sans', 'Vazirmatn', 'Roboto', 'sans-serif'];
+        return ['Comic Neue', 'Comic Sans MS', 'Comic Sans', 'sans-serif'];
       case AppFontStyle.roundedBold:
-        return ['Quicksand', 'Arial Rounded MT Bold', 'Vazirmatn', 'Roboto', 'sans-serif'];
-      case AppFontStyle.vazirmatn:
-        return ['Vazirmatn', 'Vazir', 'Tahoma', 'sans-serif'];
+        return ['Quicksand', 'Arial Rounded MT Bold', 'sans-serif'];
       case AppFontStyle.techMono:
-        return ['Fira Code', 'Cascadia Code', 'Consolas', 'Vazirmatn', 'monospace'];
+        return ['Fira Code', 'Cascadia Code', 'Consolas', 'monospace'];
       case AppFontStyle.editorialSerif:
-        return ['Lora', 'Georgia', 'Cambria', 'Vazirmatn', 'serif'];
+        return ['Lora', 'Georgia', 'Cambria', 'serif'];
       case AppFontStyle.defaultSans:
-        return ['Vazirmatn', 'Roboto', 'Segoe UI', 'sans-serif'];
+        return ['sans-serif', 'Roboto', 'Noto Sans Arabic', 'Segoe UI'];
     }
   }
 
