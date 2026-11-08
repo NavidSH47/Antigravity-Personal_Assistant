@@ -291,14 +291,30 @@ class CoverFetchService {
     return results;
   }
 
-  // --- Games: Steam Store Search with CheapShark, RAWG, LaunchBox & Libretro fallback ---
+  // --- Games: Multi-Source Cover Aggregation (Steam, RAWG, Libretro, CheapShark) ---
   static Future<List<CoverSearchResult>> _searchGames(
     String query,
     http.Client client,
   ) async {
     final results = <CoverSearchResult>[];
+    final seenUrls = <String>{};
 
-    // 1. Steam Store Search (Primary for PC titles)
+    void addResult(CoverSearchResult result) {
+      final sanitized = sanitizeImageUrl(result.coverUrl);
+      if (sanitized.isNotEmpty && !seenUrls.contains(sanitized)) {
+        seenUrls.add(sanitized);
+        results.add(
+          CoverSearchResult(
+            title: result.title,
+            coverUrl: sanitized,
+            year: result.year,
+            source: result.source,
+          ),
+        );
+      }
+    }
+
+    // 1. Steam Store Search (Top PC candidates)
     try {
       final uri = Uri.parse(
         'https://store.steampowered.com/api/storesearch/?term=${Uri.encodeComponent(query)}&l=english&cc=US',
@@ -307,23 +323,24 @@ class CoverFetchService {
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
         final items = (data['items'] as List<dynamic>?) ?? [];
-        for (final item in items) {
+        for (final item in items.take(3)) {
           final id = item['id'];
           final name = item['name']?.toString() ?? query;
-          String? coverUrl;
           if (id != null) {
-            // Steam vertical library poster (4:3 / portrait)
-            coverUrl =
-                'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/$id/library_600x900_2x.jpg';
-          } else if (item['tiny_image'] != null) {
-            coverUrl = item['tiny_image'].toString();
-          }
-
-          if (coverUrl != null) {
-            results.add(
+            // Steam vertical library poster
+            addResult(
               CoverSearchResult(
                 title: name,
-                coverUrl: sanitizeImageUrl(coverUrl),
+                coverUrl:
+                    'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/$id/library_600x900_2x.jpg',
+                source: 'Steam',
+              ),
+            );
+          } else if (item['tiny_image'] != null) {
+            addResult(
+              CoverSearchResult(
+                title: name,
+                coverUrl: item['tiny_image'].toString(),
                 source: 'Steam',
               ),
             );
@@ -332,11 +349,57 @@ class CoverFetchService {
       }
     } catch (_) {}
 
-    // 2. CheapShark Search (PC fallback)
-    if (results.isEmpty) {
+    // 2. RAWG Video Games Database API (Multi-Platform / Nintendo / PlayStation / Xbox / PC)
+    // Always queried alongside Steam to ensure console and canonical cover options are always available
+    try {
+      final uri = Uri.parse(
+        'https://api.rawg.io/api/games?search=${Uri.encodeComponent(query)}&page_size=4&key=c542e67aec3a4340908f9de9e86038af',
+      );
+      final resp = await client.get(uri, headers: _requestHeaders).timeout(_timeout);
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        final items = (data['results'] as List<dynamic>?) ?? [];
+        for (final item in items.take(4)) {
+          final name = item['name']?.toString() ?? query;
+          final bg = item['background_image']?.toString();
+          final released = item['released']?.toString();
+          final year = released != null && released.length >= 4 ? released.substring(0, 4) : null;
+          if (bg != null && bg.isNotEmpty) {
+            addResult(
+              CoverSearchResult(
+                title: name,
+                coverUrl: bg,
+                year: year,
+                source: 'RAWG',
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Libretro Boxart CDN (Direct zero-auth box art for Nintendo & retro console titles)
+    try {
+      final formatted = query.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
+      final switchUrl =
+          'https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_Switch/master/Named_Boxarts/$formatted.png';
+      final headResp = await client.head(Uri.parse(switchUrl)).timeout(const Duration(seconds: 4));
+      if (headResp.statusCode == 200) {
+        addResult(
+          CoverSearchResult(
+            title: query,
+            coverUrl: switchUrl,
+            source: 'Libretro',
+          ),
+        );
+      }
+    } catch (_) {}
+
+    // 4. CheapShark Search (Fallback if candidate pool is still small)
+    if (results.length < 3) {
       try {
         final uri = Uri.parse(
-          'https://www.cheapshark.com/api/1.0/games?title=${Uri.encodeComponent(query)}&limit=6',
+          'https://www.cheapshark.com/api/1.0/games?title=${Uri.encodeComponent(query)}&limit=4',
         );
         final resp = await client.get(uri, headers: _requestHeaders).timeout(_timeout);
         if (resp.statusCode == 200) {
@@ -353,10 +416,10 @@ class CoverFetchService {
             }
 
             if (coverUrl != null) {
-              results.add(
+              addResult(
                 CoverSearchResult(
                   title: name,
-                  coverUrl: sanitizeImageUrl(coverUrl),
+                  coverUrl: coverUrl,
                   source: 'CheapShark',
                 ),
               );
@@ -366,62 +429,11 @@ class CoverFetchService {
       } catch (_) {}
     }
 
-    // 3. RAWG Video Games Database API (Multi-Platform / Nintendo Switch / PlayStation / Xbox)
-    if (results.isEmpty) {
-      try {
-        // RAWG public free tier endpoint
-        final uri = Uri.parse(
-          'https://api.rawg.io/api/games?search=${Uri.encodeComponent(query)}&page_size=5&key=c542e67aec3a4340908f9de9e86038af',
-        );
-        final resp = await client.get(uri, headers: _requestHeaders).timeout(_timeout);
-        if (resp.statusCode == 200) {
-          final data = json.decode(resp.body) as Map<String, dynamic>;
-          final items = (data['results'] as List<dynamic>?) ?? [];
-          for (final item in items) {
-            final name = item['name']?.toString() ?? query;
-            final bg = item['background_image']?.toString();
-            final released = item['released']?.toString();
-            final year = released != null && released.length >= 4 ? released.substring(0, 4) : null;
-            if (bg != null && bg.isNotEmpty) {
-              results.add(
-                CoverSearchResult(
-                  title: name,
-                  coverUrl: sanitizeImageUrl(bg),
-                  year: year,
-                  source: 'RAWG',
-                ),
-              );
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
-    // 4. Libretro Boxart CDN (Direct zero-auth box art for Nintendo & retro console titles)
-    if (results.isEmpty) {
-      try {
-        // Formatted title for Libretro thumbnails repo
-        final formatted = query.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
-        final switchUrl =
-            'https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_Switch/master/Named_Boxarts/$formatted.png';
-        final headResp = await client.head(Uri.parse(switchUrl)).timeout(const Duration(seconds: 4));
-        if (headResp.statusCode == 200) {
-          results.add(
-            CoverSearchResult(
-              title: query,
-              coverUrl: sanitizeImageUrl(switchUrl),
-              source: 'Libretro',
-            ),
-          );
-        }
-      } catch (_) {}
-    }
-
-    // 5. iTunes / LaunchBox Web Search Fallback for Console/Mobile titles
-    if (results.isEmpty) {
+    // 5. iTunes / LaunchBox Store Fallback (If pool is still small)
+    if (results.length < 2) {
       try {
         final uri = Uri.parse(
-          'https://itunes.apple.com/search?term=${Uri.encodeComponent(query)}&entity=software&limit=5',
+          'https://itunes.apple.com/search?term=${Uri.encodeComponent(query)}&entity=software&limit=3',
         );
         final resp = await client.get(uri, headers: _requestHeaders).timeout(_timeout);
         if (resp.statusCode == 200) {
@@ -434,10 +446,10 @@ class CoverFetchService {
               final title = item['trackName']?.toString() ?? query;
               final release = item['releaseDate']?.toString();
               final year = release != null && release.length >= 4 ? release.substring(0, 4) : null;
-              results.add(
+              addResult(
                 CoverSearchResult(
                   title: title,
-                  coverUrl: sanitizeImageUrl(thumb),
+                  coverUrl: thumb,
                   year: year,
                   source: 'LaunchBox/Store',
                 ),

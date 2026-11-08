@@ -36,6 +36,18 @@ class SafeCoverImage extends StatelessWidget {
     return 'https://images.weserv.nl/?url=${Uri.encodeComponent(withoutProto)}';
   }
 
+  /// Returns the fallback Steam header.jpg URL if the given [url] is a Steam library poster,
+  /// or null if not applicable. Guaranteed to resolve on Steam CDN when library_600x900 404s.
+  static String? getSteamHeaderFallbackUrl(String url) {
+    final cleanUrl = sanitizeUrl(url);
+    final isSteamLibrary =
+        cleanUrl.contains('steamstatic.com') && cleanUrl.contains('library_600x900');
+    if (isSteamLibrary) {
+      return cleanUrl.replaceAll(RegExp(r'library_600x900(_2x)?\.jpg'), 'header.jpg');
+    }
+    return null;
+  }
+
   Widget _buildPlaceholder(BuildContext context) {
     return Container(
       color: Colors.black26,
@@ -79,6 +91,10 @@ class SafeCoverImage extends StatelessWidget {
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     };
 
+    // For Steam games/soundtracks where library_600x900_2x.jpg may return 404,
+    // header.jpg is universally guaranteed to exist for all App IDs on Steam CDN.
+    final steamHeaderUrl = getSteamHeaderFallbackUrl(cleanUrl);
+
     return CachedNetworkImage(
       imageUrl: effectiveUrl,
       fit: fit,
@@ -91,6 +107,29 @@ class SafeCoverImage extends StatelessWidget {
         if (effectiveUrl != fallbackUrl) {
           return CachedNetworkImage(
             imageUrl: fallbackUrl,
+            fit: fit,
+            memCacheWidth: cacheWidth,
+            memCacheHeight: cacheHeight,
+            httpHeaders: headers,
+            placeholder: (ctx, u) => _buildPlaceholder(ctx),
+            errorWidget: (ctx, u, err) {
+              if (steamHeaderUrl != null) {
+                return CachedNetworkImage(
+                  imageUrl: steamHeaderUrl,
+                  fit: fit,
+                  memCacheWidth: cacheWidth,
+                  memCacheHeight: cacheHeight,
+                  httpHeaders: headers,
+                  placeholder: (c, u2) => _buildPlaceholder(c),
+                  errorWidget: (c, u2, e2) => _buildDefaultError(c, e2, null),
+                );
+              }
+              return _buildDefaultError(ctx, err, null);
+            },
+          );
+        } else if (steamHeaderUrl != null) {
+          return CachedNetworkImage(
+            imageUrl: steamHeaderUrl,
             fit: fit,
             memCacheWidth: cacheWidth,
             memCacheHeight: cacheHeight,

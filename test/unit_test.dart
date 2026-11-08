@@ -692,6 +692,51 @@ void main() {
       expect(results.first.coverUrl.contains('1245620/library_600x900_2x.jpg'), true);
     });
 
+    test('Multi-source game search aggregates candidates from Steam and RAWG without early-exit', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'store.steampowered.com') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'id': 323150,
+                  'name': 'Half-Life 2: Episode One Soundtrack',
+                  'tiny_image': 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/323150/capsule_sm_120.jpg',
+                }
+              ]
+            }),
+            200,
+          );
+        } else if (request.url.host == 'api.rawg.io') {
+          return http.Response(
+            jsonEncode({
+              'results': [
+                {
+                  'name': 'Half-Life 2: Episode One',
+                  'background_image': 'https://media.rawg.io/media/games/hl2ep1.jpg',
+                  'released': '2006-06-01',
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final results = await CoverFetchService.searchCovers(
+        query: 'Half-Life 2: Episode One',
+        type: MediaType.videoGame,
+        client: mockClient,
+      );
+
+      expect(results.length, 2);
+      expect(results.any((r) => r.source == 'Steam'), isTrue);
+      expect(results.any((r) => r.source == 'RAWG'), isTrue);
+      expect(results.firstWhere((r) => r.source == 'RAWG').title, 'Half-Life 2: Episode One');
+      expect(results.firstWhere((r) => r.source == 'RAWG').year, '2006');
+    });
+
     test('Empty query and network error return empty list safely', () async {
       final emptyResults = await CoverFetchService.searchCovers(
         query: '   ',
@@ -971,6 +1016,24 @@ void main() {
     test('CoverFetchService.sanitizeImageUrl cleans URL paths', () {
       final clean = CoverFetchService.sanitizeImageUrl('https://example.com///path//img.png');
       expect(clean, 'https://example.com/path/img.png');
+    });
+
+    test('SafeCoverImage.getSteamHeaderFallbackUrl maps library poster to header.jpg', () {
+      const steam2x =
+          'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/323150/library_600x900_2x.jpg';
+      const steam1x =
+          'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/323150/library_600x900.jpg';
+      const nonSteam = 'https://example.com/cover.jpg';
+
+      expect(
+        SafeCoverImage.getSteamHeaderFallbackUrl(steam2x),
+        'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/323150/header.jpg',
+      );
+      expect(
+        SafeCoverImage.getSteamHeaderFallbackUrl(steam1x),
+        'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/323150/header.jpg',
+      );
+      expect(SafeCoverImage.getSteamHeaderFallbackUrl(nonSteam), isNull);
     });
   });
 

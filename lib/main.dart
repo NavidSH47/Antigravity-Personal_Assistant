@@ -1951,6 +1951,26 @@ class _HomeScreenState extends State<HomeScreen> {
                                             Icon(Icons.broken_image, size: 16),
                                       ),
                                     ),
+                                    Positioned(
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                                        color: Colors.black.withValues(alpha: 0.75),
+                                        child: Text(
+                                          c.source,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
                                     if (isSelected)
                                       Positioned(
                                         top: 2,
@@ -2383,6 +2403,26 @@ class _HomeScreenState extends State<HomeScreen> {
                                         child: Icon(Icons.broken_image, size: 16),
                                       ),
                                     ),
+                                    Positioned(
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                                        color: Colors.black.withValues(alpha: 0.75),
+                                        child: Text(
+                                          c.source,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
                                     if (isSelected)
                                       Positioned(
                                         top: 2,
@@ -2697,21 +2737,69 @@ class _HomeScreenState extends State<HomeScreen> {
                             separatorBuilder: (c, i) => const SizedBox(width: 8),
                             itemBuilder: (c, idx) {
                               final cand = candidates[idx];
+                              final isSelected = coverUrlController.text == cand.coverUrl;
                               return InkWell(
                                 onTap: () {
                                   setDState(() {
                                     coverUrlController.text = cand.coverUrl;
-                                    candidates = [];
                                   });
                                 },
+                                borderRadius: BorderRadius.circular(6),
                                 child: Container(
                                   width: 65,
                                   decoration: BoxDecoration(
-                                    border: Border.all(color: _palette.borderSubtle),
+                                    border: Border.all(
+                                      color: isSelected ? _palette.accentPrimary : _palette.borderSubtle,
+                                      width: isSelected ? 2 : 1,
+                                    ),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   clipBehavior: Clip.antiAlias,
-                                  child: SafeCoverImage(url: cand.coverUrl),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      SafeCoverImage(
+                                        url: cand.coverUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (context, error, stackTrace) => const Center(
+                                          child: Icon(Icons.broken_image, size: 16),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        bottom: 0,
+                                        left: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                                          color: Colors.black.withValues(alpha: 0.75),
+                                          child: Text(
+                                            cand.source,
+                                            textAlign: TextAlign.center,
+                                            style: const TextStyle(
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isSelected)
+                                        Positioned(
+                                          top: 2,
+                                          right: 2,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(2),
+                                            decoration: const BoxDecoration(
+                                              color: Colors.green,
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.check, size: 10, color: Colors.white),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               );
                             },
