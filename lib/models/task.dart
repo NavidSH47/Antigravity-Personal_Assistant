@@ -119,4 +119,16 @@ class Task {
           : DateTime.now(),
     );
   }
+
+  /// Down-listing comparator: completed (Done) tasks sink to the bottom.
+  static int compareExecutionState(Task a, Task b) {
+    final aDone = a.status == TaskStatus.done;
+    final bDone = b.status == TaskStatus.done;
+    if (aDone != bDone) return aDone ? 1 : -1;
+    return a.orderIndex.compareTo(b.orderIndex);
+  }
 }
+
+/// Down-listing comparator function matching SDD 3.2.4 specification.
+int compareTaskExecutionState(Task a, Task b) => Task.compareExecutionState(a, b);
+

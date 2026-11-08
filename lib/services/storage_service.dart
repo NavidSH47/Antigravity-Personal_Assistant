@@ -4,6 +4,7 @@ import '../models/task.dart';
 import '../models/shamsi_event.dart';
 import '../models/media_item.dart';
 import '../theme/app_theme.dart';
+import 'media_label_service.dart';
 
 class StorageService {
   static const String _keyTasks = 'nsh_tasks_v1';
@@ -12,6 +13,7 @@ class StorageService {
   static const String _keyVibe = 'nsh_theme_vibe_v1';
   static const String _keyFont = 'nsh_app_font_v1';
   static const String _keyMediaView = 'nsh_media_view_mode_v1';
+  static const String _keyActiveLabels = 'nsh_active_labels_v1';
 
   final SharedPreferences _prefs;
 
@@ -64,6 +66,19 @@ class StorageService {
 
   Future<void> saveCoverCache(String mediaId, String coverUrl) async {
     await _prefs.setString('nsh_cover_cache_$mediaId', coverUrl);
+  }
+
+  // --- ACTIVE LABELS ---
+  List<String> loadActiveLabels() {
+    final list = _prefs.getStringList(_keyActiveLabels);
+    if (list == null || list.isEmpty) {
+      return List<String>.from(MediaLabelService.presetLabels);
+    }
+    return list;
+  }
+
+  Future<void> saveActiveLabels(List<String> labels) async {
+    await _prefs.setStringList(_keyActiveLabels, labels);
   }
 
   // --- TASKS ---
@@ -214,7 +229,7 @@ class StorageService {
         releaseYear: 2021,
         personalNotes:
             'Poignant exploration of love, loneliness and AI consciousness from Klara\'s perspective.',
-        labels: ['Sci-Fi', 'Masterpiece'],
+        labels: ['Sci-Fi', 'Fantasy'],
         progressCurrent: 172,
         progressTotal: 303,
         score: 8.5,
@@ -228,7 +243,7 @@ class StorageService {
         releaseYear: 2023,
         personalNotes:
             'Incredible writing and tension. Watching Season 3 finale this week.',
-        labels: ['Drama', 'Ongoing', 'Masterpiece'],
+        labels: ['Drama', 'Ongoing', 'Fantasy'],
         progressCurrent: 32,
         progressTotal: 39,
         score: 9.5,

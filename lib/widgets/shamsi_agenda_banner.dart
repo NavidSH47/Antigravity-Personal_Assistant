@@ -189,11 +189,13 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top Header Row (Adaptive LayoutBuilder for Anti-Overflow)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 380;
-              final dateSection = Row(
+          // Centered Top Header: Centered Date & Centered Action Buttons with Dynamic Proportional Spacing
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Horizontally Centered Date Display
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
@@ -227,142 +229,125 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                     ],
                   ),
                 ],
-              );
+              ),
+              const SizedBox(height: 10),
 
-              final actionButtons = Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Add Custom Event Button
-                  if (widget.onAddCustomEvent != null) ...[
-                    InkWell(
-                      onTap: widget.onAddCustomEvent,
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: widget.palette.bgElevated,
-                          border: Border.all(color: widget.palette.borderSubtle),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.add, size: 12, color: widget.palette.accentPrimary),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Event',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: widget.palette.accentPrimary,
-                                fontWeight: FontWeight.w600,
+              // Centered Action Buttons with Proportional Spacing matching Navigation Bar
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.center,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          // Add Custom Event Button
+                          if (widget.onAddCustomEvent != null)
+                            InkWell(
+                              onTap: widget.onAddCustomEvent,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: widget.palette.bgElevated,
+                                  border: Border.all(color: widget.palette.borderSubtle),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.add, size: 12, color: widget.palette.accentPrimary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Event',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: widget.palette.accentPrimary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  // Pick Date Button using standard Gregorian DatePicker
-                  InkWell(
-                    onTap: _pickGregorianDate,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.palette.bgElevated,
-                        border: Border.all(color: widget.palette.borderSubtle),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('🗓️ ', style: TextStyle(fontSize: 11)),
-                          Text(
-                            'Pick Date',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: widget.palette.accentPrimary,
-                              fontWeight: FontWeight.w600,
+
+                          // Pick Date Button using standard Gregorian DatePicker
+                          InkWell(
+                            onTap: _pickGregorianDate,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: widget.palette.bgElevated,
+                                border: Border.all(color: widget.palette.borderSubtle),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('🗓️ ', style: TextStyle(fontSize: 11)),
+                                  Text(
+                                    'Pick Date',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: widget.palette.accentPrimary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+
+                          // Expand/Collapse Month Grid Button
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _isCalendarExpanded = !_isCalendarExpanded;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: widget.palette.bgElevated,
+                                border: Border.all(color: widget.palette.borderSubtle),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('📅 ', style: TextStyle(fontSize: 11)),
+                                  Text(
+                                    _isCalendarExpanded ? 'Close' : 'Calendar',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: widget.palette.textMain,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  // Expand/Collapse Month Grid Button
-                  InkWell(
-                    onTap: () {
-                      setState(() {
-                        _isCalendarExpanded = !_isCalendarExpanded;
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.palette.bgElevated,
-                        border: Border.all(color: widget.palette.borderSubtle),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('📅 ', style: TextStyle(fontSize: 11)),
-                          Text(
-                            _isCalendarExpanded
-                                ? 'Close'
-                                : (isNarrow ? 'Calendar' : 'Shamsi Calendar'),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: widget.palette.textMain,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              );
-
-              if (isNarrow) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: dateSection),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [actionButtons],
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(child: dateSection),
-                  actionButtons,
-                ],
-              );
-            },
+                  );
+                },
+              ),
+            ],
           ),
 
           const SizedBox(height: 10),

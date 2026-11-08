@@ -321,6 +321,49 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showConfirmDeleteLabelDialog({
+    required String tag,
+    required VoidCallback onConfirmed,
+  }) {
+    showDialog(
+      context: context,
+      builder: (dCtx) {
+        return AlertDialog(
+          backgroundColor: _palette.bgSurface,
+          title: Text(
+            'Delete Label?',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: _palette.textMain,
+            ),
+          ),
+          content: Text(
+            'Are you sure you want to permanently delete "$tag" from the database? This will untag it from all media items.',
+            style: TextStyle(fontSize: 13, color: _palette.textMuted),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dCtx),
+              child: Text('Cancel', style: TextStyle(color: _palette.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.pop(dCtx);
+                onConfirmed();
+              },
+              child: const Text('Delete Permanently'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showLabelSelectionModal({
     required BuildContext context,
     required List<String> initialSelected,
@@ -340,16 +383,35 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (modalCtx) {
         return StatefulBuilder(
           builder: (ctx, setMState) {
-            final allCustomTags = _mediaItems.expand((m) => m.labels).toSet();
-            final availablePool = <String>{...MediaLabelService.presetLabels, ...allCustomTags}.toList()..sort();
+            final poolSet = <String>{..._activeLabels};
+            for (final m in _mediaItems) {
+              poolSet.addAll(m.labels);
+            }
+            final pool = poolSet.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-            final filteredPool = availablePool.where((tag) {
+            final filteredPool = pool.where((tag) {
               if (searchQuery.trim().isEmpty) return true;
               return tag.toLowerCase().contains(searchQuery.trim().toLowerCase());
             }).toList();
 
             final canAddNew = searchQuery.trim().isNotEmpty &&
-                !availablePool.any((t) => t.toLowerCase() == searchQuery.trim().toLowerCase());
+                !pool.any((t) => t.toLowerCase() == searchQuery.trim().toLowerCase());
+
+            void addTag(String val) {
+              final trimmed = toSentenceCase(val.trim());
+              if (trimmed.isNotEmpty) {
+                setMState(() {
+                  if (!_activeLabels.any((l) => l.toLowerCase() == trimmed.toLowerCase())) {
+                    _activeLabels.add(trimmed);
+                    widget.storage.saveActiveLabels(_activeLabels);
+                  }
+                  selected = MediaLabelService.addLabel(selected, trimmed);
+                  searchController.clear();
+                  searchQuery = '';
+                });
+                setState(() {});
+              }
+            }
 
             return Padding(
               padding: EdgeInsets.only(
@@ -412,16 +474,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             onChanged: (val) => setMState(() => searchQuery = val),
-                            onSubmitted: (val) {
-                              final trimmed = toSentenceCase(val.trim());
-                              if (trimmed.isNotEmpty) {
-                                setMState(() {
-                                  selected = MediaLabelService.addLabel(selected, trimmed);
-                                  searchController.clear();
-                                  searchQuery = '';
-                                });
-                              }
-                            },
+                            onSubmitted: addTag,
                           ),
                         ),
                         if (canAddNew) ...[
@@ -434,16 +487,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             icon: const Icon(Icons.add, size: 16),
                             label: const Text('Add'),
-                            onPressed: () {
-                              final trimmed = toSentenceCase(searchQuery.trim());
-                              if (trimmed.isNotEmpty) {
-                                setMState(() {
-                                  selected = MediaLabelService.addLabel(selected, trimmed);
-                                  searchController.clear();
-                                  searchQuery = '';
-                                });
-                              }
-                            },
+                            onPressed: () => addTag(searchQuery),
                           ),
                         ],
                       ],
@@ -493,50 +537,66 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: _palette.textMuted,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Expanded(
-                      child: ListView.builder(
-                        itemCount: filteredPool.length,
-                        itemBuilder: (ctx, i) {
-                          final tag = filteredPool[i];
-                          final isChecked = selected.contains(tag);
-                          final isCustom = !MediaLabelService.presetLabels.contains(tag);
-                          return CheckboxListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Row(
-                              children: [
-                                Text(
+                      child: SingleChildScrollView(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: filteredPool.map((tag) {
+                            final isSelected = selected.contains(tag);
+                            return InkWell(
+                              onTap: () {
+                                setMState(() {
+                                  if (isSelected) {
+                                    selected = MediaLabelService.removeLabel(selected, tag);
+                                  } else {
+                                    selected = MediaLabelService.addLabel(selected, tag);
+                                  }
+                                });
+                              },
+                              onLongPress: () {
+                                _showConfirmDeleteLabelDialog(
+                                  tag: tag,
+                                  onConfirmed: () {
+                                    setMState(() {
+                                      _activeLabels.removeWhere(
+                                        (l) => l.trim().toLowerCase() == tag.trim().toLowerCase(),
+                                      );
+                                      widget.storage.saveActiveLabels(_activeLabels);
+
+                                      selected = MediaLabelService.removeLabel(selected, tag);
+
+                                      _mediaItems = MediaLabelService.untagMediaItems(_mediaItems, tag);
+                                      widget.storage.saveMediaItems(_mediaItems);
+                                    });
+                                    setState(() {});
+                                  },
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? _palette.accentPrimary : _palette.bgSurface,
+                                  border: Border.all(
+                                    color: isSelected ? _palette.accentPrimary : _palette.borderSubtle,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
                                   tag,
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: _palette.textMain,
-                                    fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                    color: isSelected ? Colors.black : _palette.textMain,
                                   ),
                                 ),
-                                if (isCustom) ...[
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    '(Custom)',
-                                    style: TextStyle(fontSize: 10, color: _palette.textDim),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            value: isChecked,
-                            activeColor: _palette.accentPrimary,
-                            checkColor: Colors.black,
-                            onChanged: (bool? val) {
-                              setMState(() {
-                                if (val == true) {
-                                  selected = MediaLabelService.addLabel(selected, tag);
-                                } else {
-                                  selected = MediaLabelService.removeLabel(selected, tag);
-                                }
-                              });
-                            },
-                          );
-                        },
+                              ),
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -638,11 +698,14 @@ class _HomeScreenState extends State<HomeScreen> {
   String _mediaFilter = 'all';
   String _mediaSort = 'custom';
   bool _isMediaGrid = false;
+  bool _isDailyFocusCollapsed = false;
+  bool _isBacklogCollapsed = false;
 
   late Jalali _selectedDate;
   late List<Task> _tasks;
   late List<ShamsiEvent> _events;
   late List<MediaItem> _mediaItems;
+  late List<String> _activeLabels;
 
   final ScrollController _scrollController = ScrollController();
   Timer? _dragAutoScrollTimer;
@@ -694,6 +757,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _tasks = widget.storage.loadTasks();
     _events = widget.storage.loadShamsiEvents();
     _mediaItems = widget.storage.loadMediaItems();
+    _activeLabels = widget.storage.loadActiveLabels();
     _isMediaGrid = widget.storage.loadMediaViewMode() == 'grid';
     _pageController = PageController(initialPage: _currentTab == 'notes' ? 0 : 1);
   }
@@ -2869,12 +2933,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Task> get _dailyTasks =>
-      DateNavigationService.getTasksForDate(_tasks, _selectedDate);
+      DateNavigationService.getTasksForDate(_tasks, _selectedDate)
+        ..sort(compareTaskExecutionState);
 
   List<Task> get _backlogTasks => _tasks
       .where((t) => t.category == TaskCategory.general)
       .toList()
-    ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    ..sort(compareTaskExecutionState);
 
   List<MediaItem> get _filteredMediaItems {
     var list = _mediaItems.where((m) {
@@ -2903,7 +2968,7 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 'custom':
       default:
-        list.sort((a, b) => a.customOrder.compareTo(b.customOrder));
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
     }
     return list;
@@ -3108,6 +3173,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final backlog = _backlogTasks;
     final isViewingToday = DateNavigationService.isToday(_selectedDate);
 
+    final dailyTotal = daily.length;
+    final dailyDone = daily.where((t) => t.status == TaskStatus.done).length;
+    final dailyCanceled = daily.where((t) => t.status == TaskStatus.canceled).length;
+    final dailyProgress = dailyTotal == 0 ? 0.0 : (dailyDone / dailyTotal).clamp(0.0, 1.0);
+
+    final backlogTotal = backlog.length;
+    final backlogDone = backlog.where((t) => t.status == TaskStatus.done).length;
+    final backlogCanceled = backlog.where((t) => t.status == TaskStatus.canceled).length;
+    final backlogProgress = backlogTotal == 0 ? 0.0 : (backlogDone / backlogTotal).clamp(0.0, 1.0);
+
     return Listener(
       onPointerMove: (e) => _lastPointerY = e.position.dy,
       onPointerUp: (_) => _stopAutoScrollTimer(),
@@ -3127,221 +3202,364 @@ class _HomeScreenState extends State<HomeScreen> {
             onRemoveEvent: _removeShamsiEvent,
           ),
         const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      isViewingToday
-                          ? '📌 Today\'s Focus'
-                          : '📌 Focus for ${DualCalendarService.toShamsiString(_selectedDate)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: _palette.textMain,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: _palette.bgElevated,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '${daily.length}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: _palette.textMuted,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () => _openAddTaskModal(TaskCategory.daily),
-              child: Text(
-                isViewingToday ? '+ Add' : '+ Add to Day',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: _palette.accentPrimary,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (daily.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              isViewingToday
-                  ? 'No tasks scheduled for today. Add one above!'
-                  : 'No tasks scheduled for this day. Add one above!',
-              style: TextStyle(
-                fontSize: 12,
-                color: _palette.textDim,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          )
-        else
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            itemCount: daily.length,
-            onReorderStart: (_) {
-              _isDraggingTask = true;
-              _startAutoScrollTimer();
-            },
-            // ignore: deprecated_member_use
-            onReorder: (oldIndex, newIndex) {
-              _isDraggingTask = false;
-              _stopAutoScrollTimer();
-              setState(() {
-                final reordered =
-                    ReorderService.reorderTasks(daily, oldIndex, newIndex);
-                for (final updated in reordered) {
-                  final idx = _tasks.indexWhere((t) => t.id == updated.id);
-                  if (idx != -1) {
-                    _tasks[idx] = updated;
-                  }
-                }
-              });
-              widget.storage.saveTasks(_tasks);
-            },
-            itemBuilder: (context, index) {
-              final task = daily[index];
-              return TaskCard(
-                key: ValueKey(task.id),
-                task: task,
-                palette: _palette,
-                dragIndex: index,
-                onStatusChange: (status) => _setTaskStatus(task, status),
-                onPostponeOneDay: () => _postponeTaskOneDay(task),
-                onPostponeToDate: () => _showPostponeDatePickerModal(task),
-                onDemoteToBacklog: () => _demoteTaskToBacklog(task),
-                onEdit: () => _showEditTaskDialog(task),
-                onDelete: () => _deleteTask(task),
-              );
-            },
-          ),
-        const SizedBox(height: 14),
-        Divider(color: _palette.borderSubtle),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+        // --- TODAY'S FOCUS SECTION ---
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '🪐 Orbit & Backlog',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _palette.textMain,
+                Expanded(
+                  child: Row(
+                    children: [
+                      // Arrow-Only Toggle Button (strictly no text label)
+                      InkWell(
+                        onTap: () => setState(() => _isDailyFocusCollapsed = !_isDailyFocusCollapsed),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(
+                            _isDailyFocusCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                            size: 20,
+                            color: _palette.accentPrimary,
+                          ),
+                        ),
+                      ),
+                      Flexible(
+                        child: Text(
+                          isViewingToday
+                              ? '📌 Today\'s Focus'
+                              : '📌 Focus for ${DualCalendarService.toShamsiString(_selectedDate)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: _palette.textMain,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Done/Total Pill Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _palette.bgElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _palette.borderSubtle),
+                        ),
+                        child: Text(
+                          '$dailyDone/$dailyTotal Done',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: _palette.textMuted,
+                          ),
+                        ),
+                      ),
+                      if (dailyCanceled > 0) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          '• $dailyCanceled canceled',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _palette.textDim,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: _palette.bgElevated,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _openAddTaskModal(TaskCategory.daily),
                   child: Text(
-                    '${backlog.length}',
+                    isViewingToday ? '+ Add' : '+ Add to Day',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: _palette.textMuted,
+                      color: _palette.accentPrimary,
                     ),
                   ),
                 ),
               ],
             ),
-            InkWell(
-              onTap: () => _openAddTaskModal(TaskCategory.general),
-              child: Text(
-                '+ Add Backlog',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: _palette.accentPrimary,
-                ),
+            const SizedBox(height: 6),
+            // Dynamic Theme-Colored Progress Bar
+            Container(
+              height: 5,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: _palette.bgElevated,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: constraints.maxWidth * dailyProgress,
+                      decoration: BoxDecoration(
+                        gradient: _palette.accentGradient,
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: dailyProgress > 0
+                            ? [
+                                BoxShadow(
+                                  color: _palette.accentGlow,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        if (backlog.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Backlog is clear! Relax and enjoy.',
-              style: TextStyle(
-                fontSize: 12,
-                color: _palette.textDim,
-                fontStyle: FontStyle.italic,
+        AnimatedCrossFade(
+          crossFadeState: _isDailyFocusCollapsed
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 200),
+          firstChild: daily.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    isViewingToday
+                        ? 'No tasks scheduled for today. Add one above!'
+                        : 'No tasks scheduled for this day. Add one above!',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _palette.textDim,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
+              : ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: daily.length,
+                  onReorderStart: (_) {
+                    _isDraggingTask = true;
+                    _startAutoScrollTimer();
+                  },
+                  // ignore: deprecated_member_use
+                  onReorder: (oldIndex, newIndex) {
+                    _isDraggingTask = false;
+                    _stopAutoScrollTimer();
+                    setState(() {
+                      final reordered =
+                          ReorderService.reorderTasks(daily, oldIndex, newIndex);
+                      for (final updated in reordered) {
+                        final idx = _tasks.indexWhere((t) => t.id == updated.id);
+                        if (idx != -1) {
+                          _tasks[idx] = updated;
+                        }
+                      }
+                    });
+                    widget.storage.saveTasks(_tasks);
+                  },
+                  itemBuilder: (context, index) {
+                    final task = daily[index];
+                    return TaskCard(
+                      key: ValueKey(task.id),
+                      task: task,
+                      palette: _palette,
+                      dragIndex: index,
+                      onStatusChange: (status) => _setTaskStatus(task, status),
+                      onPostponeOneDay: () => _postponeTaskOneDay(task),
+                      onPostponeToDate: () => _showPostponeDatePickerModal(task),
+                      onDemoteToBacklog: () => _demoteTaskToBacklog(task),
+                      onEdit: () => _showEditTaskDialog(task),
+                      onDelete: () => _deleteTask(task),
+                    );
+                  },
+                ),
+          secondChild: const SizedBox.shrink(),
+        ),
+        const SizedBox(height: 14),
+        Divider(color: _palette.borderSubtle),
+        const SizedBox(height: 10),
+
+        // --- ORBIT & BACKLOG SECTION ---
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      // Arrow-Only Toggle Button (strictly no text label)
+                      InkWell(
+                        onTap: () => setState(() => _isBacklogCollapsed = !_isBacklogCollapsed),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(
+                            _isBacklogCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                            size: 20,
+                            color: _palette.accentPrimary,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        '🪐 Orbit & Backlog',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: _palette.textMain,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Done/Total Pill Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _palette.bgElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _palette.borderSubtle),
+                        ),
+                        child: Text(
+                          '$backlogDone/$backlogTotal Done',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: _palette.textMuted,
+                          ),
+                        ),
+                      ),
+                      if (backlogCanceled > 0) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          '• $backlogCanceled canceled',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _palette.textDim,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _openAddTaskModal(TaskCategory.general),
+                  child: Text(
+                    '+ Add Backlog',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: _palette.accentPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Dynamic Theme-Colored Progress Bar
+            Container(
+              height: 5,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: _palette.bgElevated,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: constraints.maxWidth * backlogProgress,
+                      decoration: BoxDecoration(
+                        gradient: _palette.accentGradient,
+                        borderRadius: BorderRadius.circular(4),
+                        boxShadow: backlogProgress > 0
+                            ? [
+                                BoxShadow(
+                                  color: _palette.accentGlow,
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-          )
-        else
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            itemCount: backlog.length,
-            onReorderStart: (_) {
-              _isDraggingTask = true;
-              _startAutoScrollTimer();
-            },
-            // ignore: deprecated_member_use
-            onReorder: (oldIndex, newIndex) {
-              _isDraggingTask = false;
-              _stopAutoScrollTimer();
-              setState(() {
-                final reordered =
-                    ReorderService.reorderTasks(backlog, oldIndex, newIndex);
-                for (final updated in reordered) {
-                  final idx = _tasks.indexWhere((t) => t.id == updated.id);
-                  if (idx != -1) {
-                    _tasks[idx] = updated;
-                  }
-                }
-              });
-              widget.storage.saveTasks(_tasks);
-            },
-            itemBuilder: (context, index) {
-              final task = backlog[index];
-              return TaskCard(
-                key: ValueKey(task.id),
-                task: task,
-                palette: _palette,
-                dragIndex: index,
-                onStatusChange: (status) => _setTaskStatus(task, status),
-                onAssignToToday: () => _assignTaskToToday(task),
-                onScheduleForDate: () => _assignTaskToToday(task),
-                scheduleLabel:
-                    isViewingToday ? '⚡ Assign Today' : '📅 Assign to Day',
-                onEdit: () => _showEditTaskDialog(task),
-                onDelete: () => _deleteTask(task),
-              );
-            },
-          ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        AnimatedCrossFade(
+          crossFadeState: _isBacklogCollapsed
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 200),
+          firstChild: backlog.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    'Backlog is clear! Relax and enjoy.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _palette.textDim,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
+              : ReorderableListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  buildDefaultDragHandles: false,
+                  itemCount: backlog.length,
+                  onReorderStart: (_) {
+                    _isDraggingTask = true;
+                    _startAutoScrollTimer();
+                  },
+                  // ignore: deprecated_member_use
+                  onReorder: (oldIndex, newIndex) {
+                    _isDraggingTask = false;
+                    _stopAutoScrollTimer();
+                    setState(() {
+                      final reordered =
+                          ReorderService.reorderTasks(backlog, oldIndex, newIndex);
+                      for (final updated in reordered) {
+                        final idx = _tasks.indexWhere((t) => t.id == updated.id);
+                        if (idx != -1) {
+                          _tasks[idx] = updated;
+                        }
+                      }
+                    });
+                    widget.storage.saveTasks(_tasks);
+                  },
+                  itemBuilder: (context, index) {
+                    final task = backlog[index];
+                    return TaskCard(
+                      key: ValueKey(task.id),
+                      task: task,
+                      palette: _palette,
+                      dragIndex: index,
+                      onStatusChange: (status) => _setTaskStatus(task, status),
+                      onAssignToToday: () => _assignTaskToToday(task),
+                      onScheduleForDate: () => _assignTaskToToday(task),
+                      scheduleLabel:
+                          isViewingToday ? '⚡ Assign Today' : '📅 Assign to Day',
+                      onEdit: () => _showEditTaskDialog(task),
+                      onDelete: () => _deleteTask(task),
+                    );
+                  },
+                ),
+          secondChild: const SizedBox.shrink(),
+        ),
       ],
     ),
   );
@@ -3458,7 +3676,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     items: const [
                       DropdownMenuItem(
                         value: 'custom',
-                        child: Text('Custom Order'),
+                        child: Text('Recently Added'),
                       ),
                       DropdownMenuItem(
                         value: 'score',

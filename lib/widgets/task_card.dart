@@ -85,292 +85,300 @@ class TaskCard extends StatelessWidget {
             border: Border.all(color: cardBorder),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Linked Media Goal Badge if attached
-              if (task.linkedMediaId != null) ...[
-                Container(
-                  margin: const EdgeInsets.only(left: 26, bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: palette.accentPrimary.withValues(alpha: 0.15),
-                    border: Border.all(color: palette.borderSubtle),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '🎯 Media Goal: ${task.mediaTitle ?? 'Linked Media'}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: palette.accentPrimary,
-                        ),
-                      ),
-                      if (task.mediaUnitsToAdvance != null) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          '• +${task.mediaUnitsToAdvance!.toInt()}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: palette.textMain,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-
-              // Top Row: Drag Handle + Title + Options Menu
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2, right: 8),
-                    child: dragIndex != null
-                        ? ReorderableDragStartListener(
-                            index: dragIndex!,
-                            child: MouseRegion(
-                              cursor: SystemMouseCursors.grab,
-                              child: Icon(
-                                Icons.drag_indicator,
-                                size: 18,
-                                color: palette.textDim,
-                              ),
-                            ),
-                          )
-                        : Icon(
+              // Vertically Centered Left Reorder Handle
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: dragIndex != null
+                    ? ReorderableDragStartListener(
+                        index: dragIndex!,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.grab,
+                          child: Icon(
                             Icons.drag_indicator,
                             size: 18,
                             color: palette.textDim,
                           ),
-                  ),
-                  Expanded(
-                    child: InkWell(
-                      onTap: onEdit,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            task.title,
-                            textDirection: RtlDetectionService.resolveDirection(task.title),
-                            textAlign: RtlDetectionService.resolveAlignment(task.title),
-                            style: titleStyle,
-                          ),
-                          if (!isMini) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              task.notes,
-                              textDirection: RtlDetectionService.resolveDirection(task.notes),
-                              textAlign: RtlDetectionService.resolveAlignment(task.notes),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: palette.textMuted,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ],
+                        ),
+                      )
+                    : Icon(
+                        Icons.drag_indicator,
+                        size: 18,
+                        color: palette.textDim,
                       ),
-                    ),
-                  ),
-                  if (onDelete != null)
-                    IconButton(
-                      icon: Icon(Icons.close, size: 16, color: palette.textDim),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: onDelete,
-                    ),
-                ],
               ),
 
-              SizedBox(height: isMini ? 4 : 8),
-              Divider(color: const Color(0x0FFFFFFF), height: 1),
-              SizedBox(height: isMini ? 4 : 8),
-
-              // Bottom Actions Row: 3-State Controls + Context
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // 3-State Action Buttons
-                  Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: palette.bgSurface,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Done Button
-                        _buildStateButton(
-                          label: 'Done',
-                          isActive: task.status == TaskStatus.done,
-                          activeBg: const Color(0xFF10B981),
-                          activeFg: Colors.black,
-                          targetStatus: TaskStatus.done,
-                        ),
-                        const SizedBox(width: 3),
-
-                        // Postpone to Tomorrow Button (Daily items)
-                        if (task.category == TaskCategory.daily) ...[
-                          InkWell(
-                            onTap: () {
-                              if (onPostponeOneDay != null) {
-                                onPostponeOneDay!();
-                              } else if (task.status == TaskStatus.postponed) {
-                                onStatusChange(TaskStatus.pending);
-                              } else {
-                                onStatusChange(TaskStatus.postponed);
-                              }
-                            },
-                            onLongPress: onPostponeToDate,
-                            borderRadius: BorderRadius.circular(6),
-                            child: Tooltip(
-                              triggerMode: TooltipTriggerMode.manual,
-                              message: 'Tap: Tomorrow (+1 day) • Hold: Pick Shamsi date',
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: task.status == TaskStatus.postponed
-                                      ? const Color(0xFFF59E0B)
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'Tomorrow',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: task.status == TaskStatus.postponed
-                                        ? Colors.black
-                                        : palette.textMuted,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                        ],
-
-                        // Cancel Button
-                        _buildStateButton(
-                          label: 'Cancel',
-                          isActive: task.status == TaskStatus.canceled,
-                          activeBg: const Color(0xFFEF4444),
-                          activeFg: Colors.white,
-                          targetStatus: TaskStatus.canceled,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Right side: Schedule / Assign or Demote to Backlog or Badge
-                  if (task.category == TaskCategory.general && (onScheduleForDate != null || onAssignToToday != null))
-                    InkWell(
-                      onTap: onScheduleForDate ?? onAssignToToday,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
+              // Card Main Body
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Linked Media Goal Badge if attached
+                    if (task.linkedMediaId != null) ...[
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
+                          color: palette.accentPrimary.withValues(alpha: 0.15),
                           border: Border.all(color: palette.borderSubtle),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.bolt,
-                              size: 13,
-                              color: palette.accentPrimary,
-                            ),
-                            const SizedBox(width: 4),
                             Text(
-                              scheduleLabel ?? '⚡ Schedule',
+                              '🎯 Media Goal: ${task.mediaTitle ?? 'Linked Media'}',
                               style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
                                 color: palette.accentPrimary,
                               ),
                             ),
+                            if (task.mediaUnitsToAdvance != null) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '• +${task.mediaUnitsToAdvance!.toInt()}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: palette.textMain,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                    )
-                  else if (task.category == TaskCategory.daily && onDemoteToBacklog != null)
+                    ],
+
+                    // Top Row: Title + Options Menu
                     Row(
-                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        InkWell(
-                          onTap: onDemoteToBacklog,
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: palette.borderSubtle),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                        Expanded(
+                          child: InkWell(
+                            onTap: onEdit,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                Icon(
-                                  Icons.move_to_inbox,
-                                  size: 12,
-                                  color: palette.textMuted,
-                                ),
-                                const SizedBox(width: 3),
                                 Text(
-                                  'To Backlog',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: palette.textMuted,
-                                  ),
+                                  task.title,
+                                  textDirection: RtlDetectionService.resolveDirection(task.title),
+                                  textAlign: RtlDetectionService.resolveAlignment(task.title),
+                                  style: titleStyle,
                                 ),
+                                if (!isMini) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    task.notes,
+                                    textDirection: RtlDetectionService.resolveDirection(task.notes),
+                                    textAlign: RtlDetectionService.resolveAlignment(task.notes),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: palette.textMuted,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
                         ),
-                        if (task.linkedMediaId != null || task.status == TaskStatus.postponed) ...[
-                          const SizedBox(width: 8),
+                        if (onDelete != null)
+                          IconButton(
+                            icon: Icon(Icons.close, size: 16, color: palette.textDim),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: onDelete,
+                          ),
+                      ],
+                    ),
+
+                    SizedBox(height: isMini ? 4 : 8),
+                    Divider(color: const Color(0x0FFFFFFF), height: 1),
+                    SizedBox(height: isMini ? 4 : 8),
+
+                    // Bottom Actions Row: 3-State Controls + Context
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // 3-State Action Buttons
+                        Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: palette.bgSurface,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Done Button
+                              _buildStateButton(
+                                label: 'Done',
+                                isActive: task.status == TaskStatus.done,
+                                activeBg: const Color(0xFF10B981),
+                                activeFg: Colors.black,
+                                targetStatus: TaskStatus.done,
+                              ),
+                              const SizedBox(width: 3),
+
+                              // Postpone Button (Daily items)
+                              if (task.category == TaskCategory.daily) ...[
+                                InkWell(
+                                  onTap: () {
+                                    if (onPostponeOneDay != null) {
+                                      onPostponeOneDay!();
+                                    } else if (task.status == TaskStatus.postponed) {
+                                      onStatusChange(TaskStatus.pending);
+                                    } else {
+                                      onStatusChange(TaskStatus.postponed);
+                                    }
+                                  },
+                                  onLongPress: onPostponeToDate,
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Tooltip(
+                                    triggerMode: TooltipTriggerMode.manual,
+                                    message: 'Tap: Postpone (+1 day) • Hold: Pick Shamsi date',
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: task.status == TaskStatus.postponed
+                                            ? const Color(0xFFF59E0B)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        task.postponedCount >= 2
+                                            ? 'Postpone ${task.postponedCount}x'
+                                            : 'Postpone',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: task.status == TaskStatus.postponed
+                                              ? Colors.black
+                                              : palette.textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                              ],
+
+                              // Cancel Button
+                              _buildStateButton(
+                                label: 'Cancel',
+                                isActive: task.status == TaskStatus.canceled,
+                                activeBg: const Color(0xFFEF4444),
+                                activeFg: Colors.white,
+                                targetStatus: TaskStatus.canceled,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Right side: Schedule / Assign or Demote to Backlog or Badge
+                        if (task.category == TaskCategory.general && (onScheduleForDate != null || onAssignToToday != null))
+                          InkWell(
+                            onTap: onScheduleForDate ?? onAssignToToday,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: palette.borderSubtle),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.bolt,
+                                    size: 13,
+                                    color: palette.accentPrimary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    scheduleLabel ?? '⚡ Schedule',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: palette.accentPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (task.category == TaskCategory.daily && onDemoteToBacklog != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: onDemoteToBacklog,
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: palette.borderSubtle),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.move_to_inbox,
+                                        size: 12,
+                                        color: palette.textMuted,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'To Backlog',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: palette.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (task.linkedMediaId != null) ...[
+                                const SizedBox(width: 8),
+                                Text(
+                                  '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: palette.accentPrimary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          )
+                        else if (task.linkedMediaId != null)
                           Text(
-                            task.linkedMediaId != null
-                                ? '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check'
-                                : 'Postponed (${task.postponedCount}x)',
+                            '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check',
                             style: TextStyle(
                               fontSize: 10,
-                              fontWeight: task.linkedMediaId != null ? FontWeight.bold : FontWeight.normal,
-                              color: task.linkedMediaId != null ? palette.accentPrimary : palette.textDim,
+                              fontWeight: FontWeight.bold,
+                              color: palette.accentPrimary,
                             ),
                           ),
-                        ],
                       ],
-                    )
-                  else if (task.linkedMediaId != null || task.status == TaskStatus.postponed)
-                    Text(
-                      task.linkedMediaId != null
-                          ? '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check'
-                          : 'Postponed (${task.postponedCount}x)',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: task.linkedMediaId != null ? FontWeight.bold : FontWeight.normal,
-                        color: task.linkedMediaId != null ? palette.accentPrimary : palette.textDim,
-                      ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

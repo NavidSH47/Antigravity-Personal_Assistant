@@ -171,23 +171,23 @@
 
 ## 4. Verification & Testing Checklist
 
-- [ ] **Font Elimination:** App builds cleanly without `Vazirmatn`; Persian text falls back smoothly to Android system `Noto Sans Arabic`.
-- [ ] **Sentence Case:** All input dialogs capitalize only the first letter of each sentence.
-- [ ] **Custom Events & Dots:** `+ Event` creates birthdays (pink dot) and custom events (blue dot); Iranian holidays render orange dots.
-- [ ] **Centered Top Bar:** Top date is horizontally centered; `+ Event`, `Pick Date`, and `Calendar` buttons are centered with responsive dynamic spacing.
-- [ ] **Postpone Button:** Button reads "Postpone"; shows multiplier `Postpone 2x`, `Postpone 3x` when postponed ≥2x; separate "Postponed (1x)" text box is completely gone.
-- [ ] **Vertically Centered Drag Handle:** Task drag handle is vertically centered on the left side across the card's full height.
-- [ ] **Compact Mini-Tasks:** Description-less tasks render with tight padding and collapsed dividers.
-- [ ] **Done Tasks Sinking:** Completed tasks automatically move to the bottom of Today's Focus and Backlog.
-- [ ] **Collapsible Task Lists:** Today's Focus and Backlog minimize via arrow-only icon toggles (no text labels).
-- [ ] **Status Counters & Themed Progress Bar:** Section headers display Done/Cancel/Total counts with a theme-colored progress bar.
-- [ ] **Theme Consolidation:** Nordic Slate adopts Persian Turquoise background (`#091319`); Persian Turquoise is removed from the theme list.
-- [ ] **Deep Amethyst Rework:** Deep Lavender is removed; Deep Amethyst has pitch-black surfaces (`#05020A`) and bold royal jewel purple accents (`#B026FF`).
-- [ ] **Persian RTL Support:** Persian task titles align RTL; inputs dynamically flip to RTL when typing Persian.
-- [ ] **Recently Added Sort:** Entertainment sorting dropdown displays "Recently Added" and sorts items chronologically.
-- [ ] **Console Game Cover Architecture:** Fallback pipeline handles Nintendo Switch and console exclusives (RAWG / LaunchBox / Libretro).
-- [ ] **Label Defaults & Compact Sub-Menu:** "Masterpiece" removed, "Fantasy" added; label sub-menu renders as compact button chips in a `Wrap`; `(Custom)` tags removed; long-press deletes any label from database.
-- [ ] **Cover Disk Cache & 3-Second Hold:** Cached posters load offline with 0ms latency; 3-second hold on task cards and media cards opens edit dialogs.
+- [x] **Font Elimination:** App builds cleanly without `Vazirmatn`; Persian text falls back smoothly to Android system `Noto Sans Arabic`.
+- [x] **Sentence Case:** All input dialogs capitalize only the first letter of each sentence.
+- [x] **Custom Events & Dots:** `+ Event` creates birthdays (pink dot) and custom events (blue dot); Iranian holidays render orange dots.
+- [x] **Centered Top Bar:** Top date is horizontally centered; `+ Event`, `Pick Date`, and `Calendar` buttons are centered with responsive dynamic spacing.
+- [x] **Postpone Button:** Button reads "Postpone"; shows multiplier `Postpone 2x`, `Postpone 3x` when postponed ≥2x; separate "Postponed (1x)" text box is completely gone.
+- [x] **Vertically Centered Drag Handle:** Task drag handle is vertically centered on the left side across the card's full height.
+- [x] **Compact Mini-Tasks:** Description-less tasks render with tight padding and collapsed dividers.
+- [x] **Done Tasks Sinking:** Completed tasks automatically move to the bottom of Today's Focus and Backlog.
+- [x] **Collapsible Task Lists:** Today's Focus and Backlog minimize via arrow-only icon toggles (no text labels).
+- [x] **Status Counters & Themed Progress Bar:** Section headers display Done/Cancel/Total counts with a theme-colored progress bar.
+- [x] **Theme Consolidation:** Nordic Slate adopts Persian Turquoise background (`#091319`); Persian Turquoise is removed from the theme list.
+- [x] **Deep Amethyst Rework:** Deep Lavender is removed; Deep Amethyst has pitch-black surfaces (`#05020A`) and bold royal jewel purple accents (`#B026FF`).
+- [x] **Persian RTL Support:** Persian task titles align RTL; inputs dynamically flip to RTL when typing Persian.
+- [x] **Recently Added Sort:** Entertainment sorting dropdown displays "Recently Added" and sorts items chronologically.
+- [x] **Console Game Cover Architecture:** Fallback pipeline handles Nintendo Switch and console exclusives (RAWG / LaunchBox / Libretro).
+- [x] **Label Defaults & Compact Sub-Menu:** "Masterpiece" removed, "Fantasy" added; label sub-menu renders as compact button chips in a `Wrap`; `(Custom)` tags removed; long-press deletes any label from database.
+- [x] **Cover Disk Cache & 3-Second Hold:** Cached posters load offline with 0ms latency; 3-second hold on task cards and media cards opens edit dialogs.
 
 ---
 

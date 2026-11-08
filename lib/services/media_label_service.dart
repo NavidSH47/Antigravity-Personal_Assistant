@@ -7,7 +7,7 @@ class MediaLabelService {
     'Sci-Fi',
     'Drama',
     'Horror',
-    'Masterpiece',
+    'Fantasy',
     'RPG',
     'Ongoing',
   ];
@@ -31,6 +31,21 @@ class MediaLabelService {
     return currentLabels
         .where((l) => l.trim().toLowerCase() != target)
         .toList();
+  }
+
+  /// Permanently removes a label from the database pool and all media items.
+  static List<MediaItem> untagMediaItems(List<MediaItem> items, String labelToDelete) {
+    final target = labelToDelete.trim().toLowerCase();
+    return items.map((item) {
+      if (!item.labels.any((l) => l.trim().toLowerCase() == target)) {
+        return item;
+      }
+      return item.copyWith(
+        labels: item.labels
+            .where((l) => l.trim().toLowerCase() != target)
+            .toList(),
+      );
+    }).toList();
   }
 
   /// Returns unused tag suggestions from the preset list and any extra pool tags.

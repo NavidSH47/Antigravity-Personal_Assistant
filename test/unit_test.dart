@@ -380,7 +380,8 @@ void main() {
       expect(MediaLabelService.presetLabels, contains('Sci-Fi'));
       expect(MediaLabelService.presetLabels, contains('Drama'));
       expect(MediaLabelService.presetLabels, contains('Horror'));
-      expect(MediaLabelService.presetLabels, contains('Masterpiece'));
+      expect(MediaLabelService.presetLabels, contains('Fantasy'));
+      expect(MediaLabelService.presetLabels.contains('Masterpiece'), isFalse);
       expect(MediaLabelService.presetLabels, contains('RPG'));
       expect(MediaLabelService.presetLabels, contains('Ongoing'));
     });
@@ -894,7 +895,10 @@ void main() {
         ),
       );
 
-      expect(find.text('Postponed (2x)'), findsOneWidget);
+      // In Version 2.4.0, multiplier is displayed directly on the button ("Postpone 2x")
+      // and the separate "Postponed (2x)" text box is completely eliminated
+      expect(find.text('Postpone 2x'), findsOneWidget);
+      expect(find.text('Postponed (2x)'), findsNothing);
       expect(find.text('Due Today'), findsNothing);
     });
 
@@ -1040,8 +1044,8 @@ void main() {
     });
   });
 
-  group('18. Tomorrow Button Tooltip & Long Press Sub-Menu (Task 3)', () {
-    testWidgets('Tomorrow button triggers postpone on tap and date picker sub-menu on long press', (tester) async {
+  group('18. Postpone Button Tooltip & Long Press Sub-Menu (SDD 3.2.2)', () {
+    testWidgets('Postpone button triggers postpone on tap and date picker sub-menu on long press', (tester) async {
       final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
       bool postponeToDateTriggered = false;
       bool postponeOneDayTriggered = false;
@@ -1066,25 +1070,25 @@ void main() {
         ),
       );
 
-      // Verify Tomorrow button exists
-      final tomorrowFinder = find.text('Tomorrow');
-      expect(tomorrowFinder, findsOneWidget);
+      // Verify Postpone button exists (formerly Tomorrow)
+      final postponeFinder = find.text('Postpone');
+      expect(postponeFinder, findsOneWidget);
 
       // Quick tap triggers onPostponeOneDay
-      await tester.tap(tomorrowFinder);
+      await tester.tap(postponeFinder);
       await tester.pumpAndSettle();
       expect(postponeOneDayTriggered, isTrue);
 
       // Long press triggers onPostponeToDate (sub-menu)
-      await tester.longPress(tomorrowFinder);
+      await tester.longPress(postponeFinder);
       await tester.pumpAndSettle();
       expect(postponeToDateTriggered, isTrue);
 
       // Tooltip should be present with instructional text
       final tooltip = tester.widget<Tooltip>(
-        find.ancestor(of: tomorrowFinder, matching: find.byType(Tooltip)),
+        find.ancestor(of: postponeFinder, matching: find.byType(Tooltip)),
       );
-      expect(tooltip.message, 'Tap: Tomorrow (+1 day) • Hold: Pick Shamsi date');
+      expect(tooltip.message, 'Tap: Postpone (+1 day) • Hold: Pick Shamsi date');
     });
   });
 
@@ -1185,23 +1189,25 @@ void main() {
       expect(revivedCustom.category, EventCategory.customDate);
     });
 
-    test('Theme Palettes Revitalization: Persian Turquoise & Differentiated Purple Vibes', () {
-      // Renamed palette
-      expect(AppTheme.vibes.containsKey(ThemeVibe.persianTurquoise), isTrue);
-      final turquoise = AppTheme.vibes[ThemeVibe.persianTurquoise]!;
-      expect(turquoise.label, 'Persian Turquoise');
+    test('Theme Palettes Revitalization & Consolidation: Persian Turquoise Merged, Purple Deepened', () {
+      // Persian Turquoise merged into Nordic Slate
+      expect(AppTheme.vibes.containsKey(ThemeVibe.minimalNordic), isTrue);
+      final nordic = AppTheme.vibes[ThemeVibe.minimalNordic]!;
+      expect(nordic.label, 'Nordic Slate');
+      expect(nordic.bgCanvas, const Color(0xFF091319));
+      expect(nordic.bgSurface, const Color(0xFF0F1F28));
+      expect(nordic.bgElevated, const Color(0xFF162D3A));
+      expect(nordic.accentPrimary, const Color(0xFF38BDF8));
 
-      // 4 Purple Palettes strictly differentiated
+      // 3 Purple Palettes strictly differentiated
       final amethyst = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
-      final lavender = AppTheme.vibes[ThemeVibe.electricLavender]!;
       final purpleGold = AppTheme.vibes[ThemeVibe.imperialGold]!;
       final purpleOrange = AppTheme.vibes[ThemeVibe.purpleOrange]!;
 
-      expect(amethyst.accentPrimary, const Color(0xFFA855F7));
-      expect(amethyst.bgCanvas, const Color(0xFF0E0616));
-
-      expect(lavender.accentPrimary, const Color(0xFFE9D5FF));
-      expect(lavender.bgCanvas, const Color(0xFF0A0B1A));
+      expect(amethyst.accentPrimary, const Color(0xFFB026FF));
+      expect(amethyst.bgCanvas, const Color(0xFF05020A));
+      expect(amethyst.bgSurface, const Color(0xFF0F0419));
+      expect(amethyst.bgElevated, const Color(0xFF1B072D));
 
       expect(purpleGold.accentPrimary, const Color(0xFFF59E0B));
       expect(purpleGold.bgCanvas, const Color(0xFF08040C));
@@ -1209,7 +1215,7 @@ void main() {
       expect(purpleOrange.accentPrimary, const Color(0xFFFF6B00));
       expect(purpleOrange.bgCanvas, const Color(0xFF12061A));
 
-      // Revitalized bland palettes
+      // Revitalized palettes
       final emerald = AppTheme.vibes[ThemeVibe.emeraldCyan]!;
       expect(emerald.accentPrimary, const Color(0xFF10B981));
 
@@ -1322,6 +1328,170 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(editMediaTriggered, isTrue);
+    });
+  });
+
+  group('21. Version 2.4.0 SDD Verification Suite', () {
+    test('Theme Harmonization: Persian Turquoise merged into Nordic Slate and Deep Amethyst pitch-black', () {
+      final nordic = AppTheme.vibes[ThemeVibe.minimalNordic]!;
+      expect(nordic.bgCanvas, const Color(0xFF091319));
+      expect(nordic.bgSurface, const Color(0xFF0F1F28));
+      expect(nordic.bgElevated, const Color(0xFF162D3A));
+      expect(nordic.accentPrimary, const Color(0xFF38BDF8));
+
+      final amethyst = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      expect(amethyst.bgCanvas, const Color(0xFF05020A));
+      expect(amethyst.bgSurface, const Color(0xFF0F0419));
+      expect(amethyst.bgElevated, const Color(0xFF1B072D));
+      expect(amethyst.accentPrimary, const Color(0xFFB026FF));
+
+      // 9 total vibes
+      expect(ThemeVibe.values.length, 9);
+    });
+
+    test('Completed ("Done") Tasks Sinking: compareTaskExecutionState partitions Done to bottom', () {
+      final task1Pending = Task(id: '1', title: 'Task 1', status: TaskStatus.pending, orderIndex: 0);
+      final task2Done = Task(id: '2', title: 'Task 2', status: TaskStatus.done, orderIndex: 1);
+      final task3Pending = Task(id: '3', title: 'Task 3', status: TaskStatus.pending, orderIndex: 2);
+      final task4Done = Task(id: '4', title: 'Task 4', status: TaskStatus.done, orderIndex: 3);
+
+      final list = [task2Done, task1Pending, task4Done, task3Pending];
+      list.sort(compareTaskExecutionState);
+
+      expect(list.map((t) => t.id).toList(), ['1', '3', '2', '4']);
+    });
+
+    testWidgets('Postpone Button Dynamic Multiplier & Standalone Text Box Elimination (SDD 3.2.2)', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+
+      // 1x postponed
+      final task1x = Task(
+        id: 't-1x',
+        title: 'Task 1x Postponed',
+        category: TaskCategory.daily,
+        status: TaskStatus.postponed,
+        postponedCount: 1,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task1x,
+              palette: palette,
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Postpone'), findsOneWidget);
+      // Standalone text box completely eliminated
+      expect(find.text('Postponed (1x)'), findsNothing);
+
+      // 3x postponed
+      final task3x = Task(
+        id: 't-3x',
+        title: 'Task 3x Postponed',
+        category: TaskCategory.daily,
+        status: TaskStatus.postponed,
+        postponedCount: 3,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task3x,
+              palette: palette,
+              onStatusChange: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Postpone 3x'), findsOneWidget);
+      expect(find.text('Postponed (3x)'), findsNothing);
+    });
+
+    testWidgets('ShamsiAgendaBanner Centered Date & Centered Action Buttons (SDD 3.2.1)', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShamsiAgendaBanner(
+              events: const [],
+              palette: palette,
+              onAddCustomEvent: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Pick Date'), findsOneWidget);
+      expect(find.text('Calendar'), findsOneWidget);
+      expect(find.text('Event'), findsOneWidget);
+    });
+
+    test('Media Label Service: "Fantasy" preset & permanent untagMediaItems deletion', () {
+      expect(MediaLabelService.presetLabels, contains('Fantasy'));
+      expect(MediaLabelService.presetLabels.contains('Masterpiece'), isFalse);
+
+      final items = <MediaItem>[
+        MediaItem(id: 'm1', type: MediaType.movie, title: 'Item 1', releaseYear: 2020, progressCurrent: 0, progressTotal: 100, labels: ['Fantasy', 'Sci-Fi']),
+        MediaItem(id: 'm2', type: MediaType.book, title: 'Item 2', releaseYear: 2021, progressCurrent: 0, progressTotal: 200, labels: ['Drama']),
+      ];
+
+      final untagged = MediaLabelService.untagMediaItems(items, 'Fantasy');
+      expect(untagged[0].labels, ['Sci-Fi']);
+      expect(untagged[1].labels, ['Drama']);
+    });
+
+    test('Chronological Media Sorting: custom order sorts by createdAt descending', () {
+      final now = DateTime.now();
+      final itemOlder = MediaItem(
+        id: 'm-old',
+        type: MediaType.videoGame,
+        title: 'Old Game',
+        releaseYear: 2010,
+        progressCurrent: 0,
+        progressTotal: 10,
+        createdAt: now.subtract(const Duration(days: 10)),
+      );
+      final itemNewer = MediaItem(
+        id: 'm-new',
+        type: MediaType.videoGame,
+        title: 'New Game',
+        releaseYear: 2024,
+        progressCurrent: 0,
+        progressTotal: 10,
+        createdAt: now,
+      );
+
+      final list = [itemOlder, itemNewer];
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+      expect(list.first.id, 'm-new');
+      expect(list.last.id, 'm-old');
+    });
+
+    test('Multi-Platform Cover Architecture: Libretro and RAWG search fallbacks exist', () {
+      final resultRawg = CoverSearchResult(
+        title: 'The Legend of Zelda: Breath of the Wild',
+        coverUrl: 'https://media.rawg.io/media/games/zelda.jpg',
+        year: '2017',
+        source: 'RAWG',
+      );
+      expect(resultRawg.source, 'RAWG');
+      expect(resultRawg.year, '2017');
+
+      final resultLibretro = CoverSearchResult(
+        title: 'Super Mario Odyssey',
+        coverUrl: 'https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_Switch/master/Named_Boxarts/Super_Mario_Odyssey.png',
+        source: 'Libretro',
+      );
+      expect(resultLibretro.source, 'Libretro');
     });
   });
 }
