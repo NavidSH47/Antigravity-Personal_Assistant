@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-class SafeCoverImage extends StatelessWidget {
+class SafeCoverImage extends StatefulWidget {
   final String url;
   final BoxFit fit;
   final int? cacheWidth;
@@ -48,6 +49,105 @@ class SafeCoverImage extends StatelessWidget {
     return null;
   }
 
+  @override
+  State<SafeCoverImage> createState() => _SafeCoverImageState();
+}
+
+class _SafeCoverImageState extends State<SafeCoverImage> {
+  static const Map<String, String> _headers = {
+    'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  };
+
+  late List<String> _candidates;
+  int _currentIndex = 0;
+  bool _isAllFailed = false;
+  Timer? _timeoutTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _initCandidates();
+  }
+
+  @override
+  void didUpdateWidget(covariant SafeCoverImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.url != oldWidget.url) {
+      _timeoutTimer?.cancel();
+      _initCandidates();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timeoutTimer?.cancel();
+    super.dispose();
+  }
+
+  void _initCandidates() {
+    final clean = SafeCoverImage.sanitizeUrl(widget.url);
+    if (clean.isEmpty) {
+      _candidates = [];
+      _isAllFailed = true;
+      _currentIndex = 0;
+      return;
+    }
+
+    final list = <String>[];
+    final steamHeader = SafeCoverImage.getSteamHeaderFallbackUrl(clean);
+
+    if (kIsWeb) {
+      // On Web, direct connections to Steam / LaunchBox lack CORS headers.
+      // Proxied URLs ensure images load properly without silent browser drops.
+      list.add(SafeCoverImage.toCorsProxyUrl(clean));
+      if (steamHeader != null) {
+        list.add(SafeCoverImage.toCorsProxyUrl(steamHeader));
+      }
+    } else {
+      // Native platforms (Android, Windows, iOS, macOS, Linux)
+      list.add(clean);
+      if (steamHeader != null) {
+        list.add(steamHeader);
+        list.add(SafeCoverImage.toCorsProxyUrl(steamHeader));
+      }
+      list.add(SafeCoverImage.toCorsProxyUrl(clean));
+    }
+
+    // Deduplicate preserving priority order
+    _candidates = list.toSet().toList();
+    _currentIndex = 0;
+    _isAllFailed = _candidates.isEmpty;
+    _scheduleTimeout();
+  }
+
+  void _scheduleTimeout() {
+    _timeoutTimer?.cancel();
+    if (_isAllFailed || _candidates.isEmpty) return;
+
+    // Safety timeout: If any candidate image hangs in loading for > 8 seconds,
+    // automatically advance to the next candidate to prevent indefinite spinning.
+    _timeoutTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && !_isAllFailed) {
+        _advanceCandidate();
+      }
+    });
+  }
+
+  void _advanceCandidate() {
+    _timeoutTimer?.cancel();
+    if (_currentIndex + 1 < _candidates.length) {
+      setState(() {
+        _currentIndex++;
+      });
+      _scheduleTimeout();
+    } else {
+      setState(() {
+        _isAllFailed = true;
+      });
+    }
+  }
+
   Widget _buildPlaceholder(BuildContext context) {
     return Container(
       color: Colors.black26,
@@ -62,8 +162,8 @@ class SafeCoverImage extends StatelessWidget {
   }
 
   Widget _buildDefaultError(BuildContext context, Object error, StackTrace? stackTrace) {
-    if (errorBuilder != null) {
-      return errorBuilder!(context, error, stackTrace);
+    if (widget.errorBuilder != null) {
+      return widget.errorBuilder!(context, error, stackTrace);
     }
     return const Center(
       child: Icon(Icons.broken_image, size: 20, color: Colors.white38),
@@ -72,73 +172,35 @@ class SafeCoverImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cleanUrl = sanitizeUrl(url);
-    if (cleanUrl.isEmpty) {
-      return _buildDefaultError(context, 'Empty URL', null);
+    if (_isAllFailed || _candidates.isEmpty) {
+      return _buildDefaultError(context, 'Failed to load cover', null);
     }
 
-    // On Flutter Web, LaunchBox, Steam, and some CDNs do not emit Access-Control-Allow-Origin: *
-    // When direct loading fails or on Web, we route or fallback via images.weserv.nl
-    final effectiveUrl = kIsWeb &&
-            !cleanUrl.contains('weserv.nl') &&
-            !cleanUrl.contains('openlibrary.org') &&
-            !cleanUrl.contains('tvmaze.com')
-        ? toCorsProxyUrl(cleanUrl)
-        : cleanUrl;
-
-    const headers = {
-      'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    };
-
-    // For Steam games/soundtracks where library_600x900_2x.jpg may return 404,
-    // header.jpg is universally guaranteed to exist for all App IDs on Steam CDN.
-    final steamHeaderUrl = getSteamHeaderFallbackUrl(cleanUrl);
+    final activeUrl = _candidates[_currentIndex];
 
     return CachedNetworkImage(
-      imageUrl: effectiveUrl,
-      fit: fit,
-      memCacheWidth: cacheWidth,
-      memCacheHeight: cacheHeight,
-      httpHeaders: headers,
-      placeholder: (context, url) => _buildPlaceholder(context),
-      errorWidget: (context, url, error) {
-        final fallbackUrl = toCorsProxyUrl(cleanUrl);
-        if (effectiveUrl != fallbackUrl) {
-          return CachedNetworkImage(
-            imageUrl: fallbackUrl,
-            fit: fit,
-            memCacheWidth: cacheWidth,
-            memCacheHeight: cacheHeight,
-            httpHeaders: headers,
-            placeholder: (ctx, u) => _buildPlaceholder(ctx),
-            errorWidget: (ctx, u, err) {
-              if (steamHeaderUrl != null) {
-                return CachedNetworkImage(
-                  imageUrl: steamHeaderUrl,
-                  fit: fit,
-                  memCacheWidth: cacheWidth,
-                  memCacheHeight: cacheHeight,
-                  httpHeaders: headers,
-                  placeholder: (c, u2) => _buildPlaceholder(c),
-                  errorWidget: (c, u2, e2) => _buildDefaultError(c, e2, null),
-                );
-              }
-              return _buildDefaultError(ctx, err, null);
-            },
-          );
-        } else if (steamHeaderUrl != null) {
-          return CachedNetworkImage(
-            imageUrl: steamHeaderUrl,
-            fit: fit,
-            memCacheWidth: cacheWidth,
-            memCacheHeight: cacheHeight,
-            httpHeaders: headers,
-            placeholder: (ctx, u) => _buildPlaceholder(ctx),
-            errorWidget: (ctx, u, err) => _buildDefaultError(ctx, err, null),
-          );
-        }
-        return _buildDefaultError(context, error, null);
+      key: ValueKey(activeUrl),
+      imageUrl: activeUrl,
+      fit: widget.fit,
+      memCacheWidth: widget.cacheWidth,
+      memCacheHeight: widget.cacheHeight,
+      httpHeaders: _headers,
+      imageBuilder: (ctx, imageProvider) {
+        _timeoutTimer?.cancel();
+        return Image(
+          image: imageProvider,
+          fit: widget.fit,
+        );
+      },
+      placeholder: (ctx, u) => _buildPlaceholder(ctx),
+      errorWidget: (ctx, u, err) {
+        // Cleanly advance candidate on next frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _advanceCandidate();
+          }
+        });
+        return _buildPlaceholder(ctx);
       },
     );
   }

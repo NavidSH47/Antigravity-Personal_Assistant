@@ -24,7 +24,7 @@ class CoverSearchResult {
 }
 
 class CoverFetchService {
-  static const Duration _timeout = Duration(seconds: 8);
+  static const Duration _timeout = Duration(seconds: 12);
 
   static const Map<String, String> _requestHeaders = {
     'User-Agent':
@@ -291,7 +291,70 @@ class CoverFetchService {
     return results;
   }
 
-  // --- Games: Multi-Source Cover Aggregation (Steam, RAWG, Libretro, CheapShark) ---
+  // --- Games: Multi-Platform Cover Aggregation (Steam, LaunchBox, Wikipedia, RAWG, Libretro, CheapShark) ---
+  static const List<String> _libretroPlatforms = [
+    'Nintendo_-_Game_Boy_Advance',
+    'Sony_-_PlayStation_2',
+    'Sony_-_PlayStation_3',
+    'Sony_-_PlayStation_4',
+    'Nintendo_-_Nintendo_Switch',
+    'Nintendo_-_GameCube',
+    'Nintendo_-_Nintendo_DS',
+    'Nintendo_-_Nintendo_3DS',
+    'Nintendo_-_Nintendo_64',
+    'Nintendo_-_Super_Nintendo_Entertainment_System',
+    'Nintendo_-_Nintendo_Entertainment_System',
+    'Sony_-_PlayStation',
+    'Microsoft_-_Xbox_360',
+    'Microsoft_-_Xbox',
+    'Sega_-_Mega_Drive_-_Genesis',
+  ];
+
+  /// Generates regional and punctuation variations for game titles to match retro database naming conventions.
+  static List<String> generateGameTitleVariants(String rawQuery) {
+    final variants = <String>{};
+    final trimmed = rawQuery.trim();
+    if (trimmed.isEmpty) return [];
+
+    variants.add(trimmed);
+
+    // Replace ':' with ' - ' (No-Intro standard format)
+    if (trimmed.contains(':')) {
+      variants.add(trimmed.replaceAll(RegExp(r'\s*:\s*'), ' - '));
+      variants.add(trimmed.replaceAll(':', ''));
+    }
+
+    // Handle missing 'the' (e.g. "Shadow of Colossus" -> "Shadow of the Colossus")
+    if (RegExp(r'\bof\s+colossus\b', caseSensitive: false).hasMatch(trimmed)) {
+      variants.add(trimmed.replaceAll(RegExp(r'\bof\s+colossus\b', caseSensitive: false), 'of the Colossus'));
+    }
+
+    // Roman numeral conversions (e.g. " 3" -> " III", " 2" -> " II")
+    final romanMap = {
+      ' 1': ' I',
+      ' 2': ' II',
+      ' 3': ' III',
+      ' 4': ' IV',
+      ' 5': ' V',
+    };
+    for (final entry in romanMap.entries) {
+      if (trimmed.endsWith(entry.key)) {
+        variants.add(trimmed.substring(0, trimmed.length - entry.key.length) + entry.value);
+      }
+    }
+
+    final withRegions = <String>[];
+    for (final v in variants) {
+      final sanitized = v.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
+      withRegions.add(sanitized);
+      withRegions.add('$sanitized (USA)');
+      withRegions.add('$sanitized (Europe)');
+      withRegions.add('$sanitized (World)');
+    }
+
+    return withRegions.toSet().toList();
+  }
+
   static Future<List<CoverSearchResult>> _searchGames(
     String query,
     http.Client client,
@@ -327,7 +390,7 @@ class CoverFetchService {
           final id = item['id'];
           final name = item['name']?.toString() ?? query;
           if (id != null) {
-            // Steam vertical library poster
+            // Steam vertical library poster (SafeCoverImage automatically handles fallback to header.jpg)
             addResult(
               CoverSearchResult(
                 title: name,
@@ -349,8 +412,59 @@ class CoverFetchService {
       }
     } catch (_) {}
 
-    // 2. RAWG Video Games Database API (Multi-Platform / Nintendo / PlayStation / Xbox / PC)
-    // Always queried alongside Steam to ensure console and canonical cover options are always available
+    // 2. LaunchBox Games Database Search (Querying LaunchBox Games Database web frontend)
+    try {
+      final uri = Uri.parse(
+        'https://gamesdb.launchbox-app.com/games/results?search=${Uri.encodeComponent(query)}',
+      );
+      final resp = await client.get(uri, headers: _requestHeaders).timeout(const Duration(seconds: 6));
+      if (resp.statusCode == 200) {
+        final imgRegex = RegExp(
+          r'https?:\/\/images\.launchbox-app\.com\/([a-zA-Z0-9\-_]+\.(?:jpg|png|jpeg))',
+          caseSensitive: false,
+        );
+        final matches = imgRegex.allMatches(resp.body);
+        for (final m in matches.take(3)) {
+          final rawUrl = m.group(0);
+          if (rawUrl != null) {
+            addResult(
+              CoverSearchResult(
+                title: query,
+                coverUrl: rawUrl,
+                source: 'LaunchBox',
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 3. Wikipedia / MediaWiki Video Games Box Art (Zero-auth open archive for console exclusives)
+    try {
+      final wikiUri = Uri.parse(
+        'https://en.wikipedia.org/w/api.php?action=query&format=json&formatversion=2&prop=pageimages&piprop=thumbnail&pithumbsize=600&generator=search&gsrsearch=${Uri.encodeComponent('$query video game')}&gsrlimit=3&origin=*',
+      );
+      final resp = await client.get(wikiUri, headers: _requestHeaders).timeout(const Duration(seconds: 6));
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        final pages = (data['query']?['pages'] as List<dynamic>?) ?? [];
+        for (final p in pages) {
+          final thumb = p['thumbnail']?['source']?.toString();
+          final pageTitle = p['title']?.toString() ?? query;
+          if (thumb != null && thumb.isNotEmpty) {
+            addResult(
+              CoverSearchResult(
+                title: pageTitle.replaceAll(RegExp(r'\s*\([^)]*\)$'), ''),
+                coverUrl: thumb,
+                source: 'Wikipedia',
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 4. RAWG Video Games Database API (Multi-Platform / Nintendo / PlayStation / Xbox / PC)
     try {
       final uri = Uri.parse(
         'https://api.rawg.io/api/games?search=${Uri.encodeComponent(query)}&page_size=4&key=c542e67aec3a4340908f9de9e86038af',
@@ -378,24 +492,32 @@ class CoverFetchService {
       }
     } catch (_) {}
 
-    // 3. Libretro Boxart CDN (Direct zero-auth box art for Nintendo & retro console titles)
+    // 5. Libretro Boxart Multi-Platform CDN (Direct zero-auth box art for Nintendo & PlayStation & Retro Consoles)
     try {
-      final formatted = query.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
-      final switchUrl =
-          'https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_Switch/master/Named_Boxarts/$formatted.png';
-      final headResp = await client.head(Uri.parse(switchUrl)).timeout(const Duration(seconds: 4));
-      if (headResp.statusCode == 200) {
-        addResult(
-          CoverSearchResult(
-            title: query,
-            coverUrl: switchUrl,
-            source: 'Libretro',
-          ),
-        );
+      final variants = generateGameTitleVariants(query);
+      for (final platform in _libretroPlatforms.take(6)) {
+        for (final variant in variants.take(4)) {
+          if (results.length >= 8) break;
+          final url =
+              'https://raw.githubusercontent.com/libretro-thumbnails/$platform/master/Named_Boxarts/$variant.png';
+          try {
+            final headResp = await client.head(Uri.parse(url)).timeout(const Duration(seconds: 3));
+            if (headResp.statusCode == 200) {
+              addResult(
+                CoverSearchResult(
+                  title: query,
+                  coverUrl: url,
+                  source: 'Libretro',
+                ),
+              );
+              break; // Found boxart for this platform
+            }
+          } catch (_) {}
+        }
       }
     } catch (_) {}
 
-    // 4. CheapShark Search (Fallback if candidate pool is still small)
+    // 6. CheapShark Search (Fallback if candidate pool is still small)
     if (results.length < 3) {
       try {
         final uri = Uri.parse(
@@ -421,37 +543,6 @@ class CoverFetchService {
                   title: name,
                   coverUrl: coverUrl,
                   source: 'CheapShark',
-                ),
-              );
-            }
-          }
-        }
-      } catch (_) {}
-    }
-
-    // 5. iTunes / LaunchBox Store Fallback (If pool is still small)
-    if (results.length < 2) {
-      try {
-        final uri = Uri.parse(
-          'https://itunes.apple.com/search?term=${Uri.encodeComponent(query)}&entity=software&limit=3',
-        );
-        final resp = await client.get(uri, headers: _requestHeaders).timeout(_timeout);
-        if (resp.statusCode == 200) {
-          final data = json.decode(resp.body) as Map<String, dynamic>;
-          final list = (data['results'] as List<dynamic>?) ?? [];
-          for (final item in list) {
-            String? thumb = item['artworkUrl512']?.toString() ??
-                item['artworkUrl100']?.toString();
-            if (thumb != null) {
-              final title = item['trackName']?.toString() ?? query;
-              final release = item['releaseDate']?.toString();
-              final year = release != null && release.length >= 4 ? release.substring(0, 4) : null;
-              addResult(
-                CoverSearchResult(
-                  title: title,
-                  coverUrl: thumb,
-                  year: year,
-                  source: 'LaunchBox/Store',
                 ),
               );
             }

@@ -3301,31 +3301,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Row(
                     children: [
-                      // Arrow-Only Toggle Button (strictly no text label)
-                      InkWell(
-                        onTap: () => setState(() => _isDailyFocusCollapsed = !_isDailyFocusCollapsed),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Icon(
-                            _isDailyFocusCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
-                            size: 20,
-                            color: _palette.accentPrimary,
-                          ),
-                        ),
-                      ),
+                      // Arrow & Title Clickable Toggle (Both trigger collapse/expand)
                       Flexible(
-                        child: Text(
-                          isViewingToday
-                              ? '📌 Today\'s Focus'
-                              : '📌 Focus for ${DualCalendarService.toShamsiString(_selectedDate)}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: _palette.textMain,
+                        child: InkWell(
+                          onTap: () => setState(() => _isDailyFocusCollapsed = !_isDailyFocusCollapsed),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: Icon(
+                                    _isDailyFocusCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                                    size: 20,
+                                    color: _palette.accentPrimary,
+                                  ),
+                                ),
+                                Flexible(
+                                  child: Text(
+                                    isViewingToday
+                                        ? '📌 Today\'s Focus'
+                                        : '📌 Focus for ${DualCalendarService.toShamsiString(_selectedDate)}',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: _palette.textMain,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -3485,25 +3495,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Row(
                     children: [
-                      // Arrow-Only Toggle Button (strictly no text label)
+                      // Arrow & Title Clickable Toggle (Both trigger collapse/expand)
                       InkWell(
                         onTap: () => setState(() => _isBacklogCollapsed = !_isBacklogCollapsed),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6),
                         child: Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: Icon(
-                            _isBacklogCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
-                            size: 20,
-                            color: _palette.accentPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: Icon(
+                                  _isBacklogCollapsed ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                                  size: 20,
+                                  color: _palette.accentPrimary,
+                                ),
+                              ),
+                              Text(
+                                '🪐 Orbit & Backlog',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: _palette.textMain,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ),
-                      Text(
-                        '🪐 Orbit & Backlog',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: _palette.textMain,
                         ),
                       ),
                       const SizedBox(width: 8),

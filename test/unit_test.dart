@@ -1557,4 +1557,83 @@ void main() {
       expect(resultLibretro.source, 'Libretro');
     });
   });
+
+  group('22. Version 2.4.1 Refinements & Multi-Platform Cover Expansion', () {
+    test('Theme Order: Emerald Cyan precedes Solar Tangerine (Spring -> Summer -> Autumn -> Winter)', () {
+      final cyanIdx = ThemeVibe.values.indexOf(ThemeVibe.emeraldCyan);
+      final solarIdx = ThemeVibe.values.indexOf(ThemeVibe.solarTangerine);
+      final sunsetIdx = ThemeVibe.values.indexOf(ThemeVibe.sunsetAmber);
+      final arcticIdx = ThemeVibe.values.indexOf(ThemeVibe.arcticFrost);
+
+      expect(cyanIdx < solarIdx, isTrue, reason: 'Emerald Cyan (Spring) must precede Solar Tangerine (Summer)');
+      expect(solarIdx < sunsetIdx, isTrue, reason: 'Solar Tangerine (Summer) must precede Sunset Amber (Autumn)');
+      expect(sunsetIdx < arcticIdx, isTrue, reason: 'Sunset Amber (Autumn) must precede Arctic Frost (Winter)');
+    });
+
+    test('Seasonal Theme Differentiation: Solar Tangerine vs Sunset Amber', () {
+      final solar = AppTheme.vibes[ThemeVibe.solarTangerine]!;
+      final sunset = AppTheme.vibes[ThemeVibe.sunsetAmber]!;
+
+      // Verify they do not share the exact same primary accent or canvas
+      expect(solar.accentPrimary != sunset.accentPrimary, isTrue);
+      expect(solar.bgCanvas != sunset.bgCanvas, isTrue);
+      expect(solar.accentGradient.colors != sunset.accentGradient.colors, isTrue);
+
+      // Solar Tangerine is bright summer solar gold
+      expect(solar.accentPrimary, const Color(0xFFFFA000));
+      // Sunset Amber is rich autumn maple/burnt orange
+      expect(sunset.accentPrimary, const Color(0xFFEA580C));
+    });
+
+    test('generateGameTitleVariants generates console variants (Shadow of the Colossus, God of War III, Minish Cap)', () {
+      final colossusVariants = CoverFetchService.generateGameTitleVariants('Shadow of Colossus');
+      expect(colossusVariants.any((v) => v.contains('Shadow of the Colossus')), isTrue);
+      expect(colossusVariants.any((v) => v.contains('(USA)')), isTrue);
+
+      final gowVariants = CoverFetchService.generateGameTitleVariants('God of War 3');
+      expect(gowVariants.any((v) => v.contains('God of War III')), isTrue);
+
+      final zeldaVariants = CoverFetchService.generateGameTitleVariants('The Legend of Zelda: The Minish Cap');
+      expect(zeldaVariants.any((v) => v.contains('The Legend of Zelda - The Minish Cap')), isTrue);
+    });
+
+    test('Multi-source game search aggregates candidates from LaunchBox and Wikipedia', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'gamesdb.launchbox-app.com') {
+          return http.Response(
+            '<html><body><img src="https://images.launchbox-app.com/colossus-front.jpg" /></body></html>',
+            200,
+          );
+        } else if (request.url.host == 'en.wikipedia.org') {
+          return http.Response(
+            jsonEncode({
+              'query': {
+                'pages': [
+                  {
+                    'title': 'Shadow of the Colossus',
+                    'thumbnail': {
+                      'source': 'https://upload.wikimedia.org/wikipedia/en/thumb/colossus.jpg',
+                    }
+                  }
+                ]
+              }
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final results = await CoverFetchService.searchCovers(
+        query: 'Shadow of the Colossus',
+        type: MediaType.videoGame,
+        client: mockClient,
+      );
+
+      expect(results.any((r) => r.source == 'LaunchBox'), isTrue);
+      expect(results.any((r) => r.source == 'Wikipedia'), isTrue);
+      expect(results.firstWhere((r) => r.source == 'LaunchBox').coverUrl, 'https://images.launchbox-app.com/colossus-front.jpg');
+      expect(results.firstWhere((r) => r.source == 'Wikipedia').coverUrl, 'https://upload.wikimedia.org/wikipedia/en/thumb/colossus.jpg');
+    });
+  });
 }
