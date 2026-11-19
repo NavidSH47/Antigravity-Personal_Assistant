@@ -17,6 +17,7 @@ class MediaItem {
   final bool isOnHold;
   final int customOrder;
   final DateTime createdAt;
+  final DateTime displayDate;
 
   MediaItem({
     required this.id,
@@ -33,7 +34,9 @@ class MediaItem {
     this.isOnHold = false,
     this.customOrder = 0,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    DateTime? displayDate,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        displayDate = displayDate ?? (createdAt ?? DateTime.now());
 
   double get progressRatio {
     if (progressTotal <= 0) return 0.0;
@@ -42,6 +45,18 @@ class MediaItem {
   }
 
   int get progressPercent => (progressRatio * 100).round();
+
+  /// Returns true when media progress has reached 100% (done).
+  bool get isCompleted => progressTotal > 0 && (progressCurrent >= progressTotal || progressPercent >= 100);
+  bool get isDone => isCompleted;
+
+  /// Down-listing comparator: completed (100% / Done) media items sink to the bottom.
+  static int compareExecutionState(MediaItem a, MediaItem b) {
+    final aDone = a.isCompleted;
+    final bDone = b.isCompleted;
+    if (aDone != bDone) return aDone ? 1 : -1;
+    return 0;
+  }
 
   String get metricUnit {
     switch (type) {
@@ -115,6 +130,7 @@ class MediaItem {
     bool? isOnHold,
     int? customOrder,
     DateTime? createdAt,
+    DateTime? displayDate,
   }) {
     return MediaItem(
       id: id ?? this.id,
@@ -131,6 +147,7 @@ class MediaItem {
       isOnHold: isOnHold ?? this.isOnHold,
       customOrder: customOrder ?? this.customOrder,
       createdAt: createdAt ?? this.createdAt,
+      displayDate: displayDate ?? this.displayDate,
     );
   }
 
@@ -150,10 +167,18 @@ class MediaItem {
       'isOnHold': isOnHold,
       'customOrder': customOrder,
       'createdAt': createdAt.toIso8601String(),
+      'displayDate': displayDate.toIso8601String(),
     };
   }
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
+    final created = json['createdAt'] != null
+        ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
+        : DateTime.now();
+    final display = json['displayDate'] != null
+        ? DateTime.tryParse(json['displayDate'] as String) ?? created
+        : created;
+
     return MediaItem(
       id: json['id'] as String,
       type: MediaType.values.firstWhere(
@@ -174,9 +199,12 @@ class MediaItem {
       score: (json['score'] as num?)?.toDouble(),
       isOnHold: (json['isOnHold'] as bool?) ?? false,
       customOrder: (json['customOrder'] as int?) ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now()
-          : DateTime.now(),
+      createdAt: created,
+      displayDate: display,
     );
   }
 }
+
+/// Down-listing comparator function partitioning active media before completed ones.
+int compareMediaExecutionState(MediaItem a, MediaItem b) =>
+    MediaItem.compareExecutionState(a, b);

@@ -14,6 +14,9 @@ class StorageService {
   static const String _keyFont = 'nsh_app_font_v1';
   static const String _keyMediaView = 'nsh_media_view_mode_v1';
   static const String _keyActiveLabels = 'nsh_active_labels_v1';
+  static const String _keyDeletedEventIds = 'nsh_deleted_event_ids_v1';
+  static const String _keyMediaSort = 'nsh_media_sort_v1';
+  static const String _keyFontSizeScale = 'nsh_font_size_scale_v1';
 
   final SharedPreferences _prefs;
 
@@ -100,11 +103,23 @@ class StorageService {
     await _prefs.setString(_keyTasks, raw);
   }
 
-  // --- SHAMSI EVENTS ---
+  // --- SHAMSI EVENTS & DELETED IDS ---
+  Set<String> loadDeletedEventIds() {
+    return (_prefs.getStringList(_keyDeletedEventIds) ?? []).toSet();
+  }
+
+  Future<void> addDeletedEventId(String id) async {
+    final ids = loadDeletedEventIds()..add(id);
+    await _prefs.setStringList(_keyDeletedEventIds, ids.toList());
+  }
+
   List<ShamsiEvent> loadShamsiEvents() {
+    final deletedIds = loadDeletedEventIds();
     final raw = _prefs.getString(_keyEvents);
     if (raw == null) {
-      return ShamsiEvent.defaultEvents;
+      return ShamsiEvent.defaultEvents
+          .where((e) => !deletedIds.contains(e.id))
+          .toList();
     }
     try {
       final list = jsonDecode(raw) as List<dynamic>;
@@ -114,19 +129,39 @@ class StorageService {
       final existingIds = {for (final e in saved) e.id};
       final merged = List<ShamsiEvent>.from(saved);
       for (final def in ShamsiEvent.defaultEvents) {
-        if (!existingIds.contains(def.id)) {
+        if (!existingIds.contains(def.id) && !deletedIds.contains(def.id)) {
           merged.add(def);
         }
       }
       return merged;
     } catch (_) {
-      return ShamsiEvent.defaultEvents;
+      return ShamsiEvent.defaultEvents
+          .where((e) => !deletedIds.contains(e.id))
+          .toList();
     }
   }
 
   Future<void> saveShamsiEvents(List<ShamsiEvent> events) async {
     final raw = jsonEncode(events.map((e) => e.toJson()).toList());
     await _prefs.setString(_keyEvents, raw);
+  }
+
+  // --- MEDIA SORT PREFERENCE ---
+  String loadMediaSort() {
+    return _prefs.getString(_keyMediaSort) ?? 'custom';
+  }
+
+  Future<void> saveMediaSort(String sort) async {
+    await _prefs.setString(_keyMediaSort, sort);
+  }
+
+  // --- FONT SIZE SCALE ---
+  double loadFontSizeScale() {
+    return _prefs.getDouble(_keyFontSizeScale) ?? 1.0;
+  }
+
+  Future<void> saveFontSizeScale(double scale) async {
+    await _prefs.setDouble(_keyFontSizeScale, scale);
   }
 
   // --- MEDIA ITEMS ---

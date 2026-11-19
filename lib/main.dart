@@ -15,6 +15,7 @@ import 'services/media_label_service.dart';
 import 'services/media_goal_sync_service.dart';
 import 'services/cover_fetch_service.dart';
 import 'services/sentence_case_service.dart';
+import 'services/media_info_fetch_service.dart';
 import 'widgets/shamsi_agenda_banner.dart';
 import 'widgets/task_card.dart';
 import 'widgets/media_card.dart';
@@ -23,6 +24,7 @@ import 'widgets/rtl_aware_text_field.dart';
 import 'package:persian_datetime_picker/persian_datetime_picker.dart';
 import 'services/title_case_service.dart';
 import 'widgets/safe_cover_image.dart';
+import 'widgets/fast_scroll_rail.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,12 +44,14 @@ class NSHAssistantApp extends StatefulWidget {
 class _NSHAssistantAppState extends State<NSHAssistantApp> {
   late ThemeVibe _currentVibe;
   late AppFontStyle _currentFont;
+  late double _fontSizeScale;
 
   @override
   void initState() {
     super.initState();
     _currentVibe = widget.storage.loadThemeVibe();
     _currentFont = widget.storage.loadFontStyle();
+    _fontSizeScale = widget.storage.loadFontSizeScale();
   }
 
   void _updateThemeVibe(ThemeVibe vibe) {
@@ -60,18 +64,34 @@ class _NSHAssistantAppState extends State<NSHAssistantApp> {
     widget.storage.saveFontStyle(font);
   }
 
+  void _updateFontSizeScale(double scale) {
+    setState(() => _fontSizeScale = scale);
+    widget.storage.saveFontSizeScale(scale);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'NSH Pulse',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.createTheme(_currentVibe, _currentFont),
+      builder: (context, child) {
+        final mediaQueryData = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQueryData.copyWith(
+            textScaler: TextScaler.linear(_fontSizeScale),
+          ),
+          child: child!,
+        );
+      },
       home: HomeScreen(
         storage: widget.storage,
         currentVibe: _currentVibe,
         currentFont: _currentFont,
+        fontSizeScale: _fontSizeScale,
         onSelectVibe: _updateThemeVibe,
         onSelectFont: _updateFontStyle,
+        onSelectFontSizeScale: _updateFontSizeScale,
       ),
     );
   }
@@ -81,16 +101,20 @@ class HomeScreen extends StatefulWidget {
   final StorageService storage;
   final ThemeVibe currentVibe;
   final AppFontStyle currentFont;
+  final double fontSizeScale;
   final Function(ThemeVibe) onSelectVibe;
   final Function(AppFontStyle) onSelectFont;
+  final Function(double) onSelectFontSizeScale;
 
   const HomeScreen({
     super.key,
     required this.storage,
     required this.currentVibe,
     required this.currentFont,
+    this.fontSizeScale = 1.0,
     required this.onSelectVibe,
     required this.onSelectFont,
+    required this.onSelectFontSizeScale,
   });
 
   @override
@@ -708,6 +732,13 @@ class _HomeScreenState extends State<HomeScreen> {
   late List<String> _activeLabels;
 
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _entertainmentScrollController = ScrollController();
+  final GlobalKey _focusSectionKey = GlobalKey();
+  final GlobalKey _backlogSectionKey = GlobalKey();
+  final GlobalKey _activeMediaKey = GlobalKey();
+  final GlobalKey _onHoldMediaKey = GlobalKey();
+  final GlobalKey _finishedMediaKey = GlobalKey();
+
   Timer? _dragAutoScrollTimer;
   double _lastPointerY = 0.0;
   bool _isDraggingTask = false;
@@ -740,6 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _pageController.dispose();
     _dragAutoScrollTimer?.cancel();
     _scrollController.dispose();
+    _entertainmentScrollController.dispose();
     super.dispose();
   }
 
@@ -748,6 +780,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _events.removeWhere((e) => e.id == event.id);
     });
     widget.storage.saveShamsiEvents(_events);
+    widget.storage.addDeletedEventId(event.id);
   }
 
   @override
@@ -759,6 +792,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _mediaItems = widget.storage.loadMediaItems();
     _activeLabels = widget.storage.loadActiveLabels();
     _isMediaGrid = widget.storage.loadMediaViewMode() == 'grid';
+    _mediaSort = widget.storage.loadMediaSort();
     _pageController = PageController(initialPage: _currentTab == 'notes' ? 0 : 1);
   }
 
@@ -1795,14 +1829,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       return;
                     }
 
+                    final wasCompleted = item.isCompleted;
+                    final updated = item.copyWith(
+                      progressCurrent: curParsed,
+                      progressTotal: totParsed,
+                      score: selectedScore,
+                    );
+                    final nowCompleted = updated.isCompleted;
+                    DateTime newDisplayDate = item.displayDate;
+                    if (!wasCompleted && nowCompleted) {
+                      newDisplayDate = DateTime.now();
+                    } else if (wasCompleted && !nowCompleted) {
+                      newDisplayDate = DateTime.now();
+                    }
+                    final finalItem = updated.copyWith(displayDate: newDisplayDate);
+
                     setState(() {
                       final index = _mediaItems.indexWhere((m) => m.id == item.id);
                       if (index != -1) {
-                        _mediaItems[index] = item.copyWith(
-                          progressCurrent: curParsed,
-                          progressTotal: totParsed,
-                          score: selectedScore,
-                        );
+                        _mediaItems[index] = finalItem;
                       }
                     });
                     widget.storage.saveMediaItems(_mediaItems);
@@ -2092,12 +2137,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final yearController =
         TextEditingController(text: DateTime.now().year.toString());
     final totalController = TextEditingController(text: '100');
+    final notesController = TextEditingController();
     final coverUrlController = TextEditingController();
     MediaType selectedType = MediaType.book;
     List<String> selectedLabels = [];
     bool isSearchingCovers = false;
     List<CoverSearchResult> candidates = [];
     String? coverSearchMsg;
+    bool isFetchingInfo = false;
+    String? fetchInfoMsg;
 
     showDialog(
       context: context,
@@ -2208,6 +2256,84 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          icon: isFetchingInfo
+                              ? const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.search, size: 14),
+                          label: const Text('🔎 Fetch Info', style: TextStyle(fontSize: 11)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _palette.accentPrimary,
+                            side: BorderSide(color: _palette.accentPrimary.withValues(alpha: 0.6)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          ),
+                          onPressed: isFetchingInfo
+                              ? null
+                              : () async {
+                                  final title = titleController.text.trim();
+                                  if (title.isEmpty) {
+                                    setDState(() => fetchInfoMsg = 'Enter title first!');
+                                    return;
+                                  }
+                                  setDState(() {
+                                    isFetchingInfo = true;
+                                    fetchInfoMsg = null;
+                                  });
+                                  final info = await MediaInfoFetchService.fetchInfo(
+                                    title: title,
+                                    type: selectedType,
+                                  );
+                                  setDState(() {
+                                    isFetchingInfo = false;
+                                    if (info != null) {
+                                      final parts = <String>[];
+                                      if (info.releaseYear != null) {
+                                        yearController.text = info.releaseYear.toString();
+                                        parts.add('${info.releaseYear}');
+                                      }
+                                      if (selectedType == MediaType.tvShow && info.episodeCount != null) {
+                                        totalController.text = info.episodeCount.toString();
+                                        parts.add('${info.episodeCount} episodes');
+                                      } else if (selectedType == MediaType.movie && info.runtimeMinutes != null) {
+                                        totalController.text = info.runtimeMinutes.toString();
+                                        parts.add('${info.runtimeMinutes} min');
+                                      }
+                                      if (parts.isNotEmpty) {
+                                        fetchInfoMsg = 'Fetched: ${parts.join(', ')}';
+                                      } else {
+                                        fetchInfoMsg = 'No extra info found for "$title".';
+                                      }
+                                    } else {
+                                      fetchInfoMsg = 'No info found for "$title".';
+                                    }
+                                  });
+                                },
+                        ),
+                        if (fetchInfoMsg != null) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              fetchInfoMsg!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: fetchInfoMsg!.startsWith('Fetched:')
+                                    ? const Color(0xFF10B981)
+                                    : (fetchInfoMsg == 'Enter title first!' ? const Color(0xFFEF4444) : _palette.textMuted),
+                                fontStyle: FontStyle.italic,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'Labels / Tags:',
@@ -2279,6 +2405,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         }).toList(),
                       ),
                     ],
+                    const SizedBox(height: 10),
+                    RtlAwareTextField(
+                      controller: notesController,
+                      maxLines: 3,
+                      style: TextStyle(color: _palette.textMain),
+                      decoration: InputDecoration(
+                        labelText: 'Personal Description / Notes',
+                        hintText: '+ Add personal description/notes (optional)...',
+                        hintStyle: TextStyle(color: _palette.textDim.withValues(alpha: 0.45)),
+                        labelStyle: TextStyle(color: _palette.textMuted),
+                        filled: true,
+                        fillColor: _palette.bgSurface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'Cover Art:',
@@ -2496,6 +2637,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       final cover = coverUrlController.text.trim().isEmpty
                           ? null
                           : SafeCoverImage.sanitizeUrl(coverUrlController.text);
+                      final notes = notesController.text.trim().isEmpty
+                          ? null
+                          : toSentenceCase(notesController.text.trim());
                       final newItem = MediaItem(
                         id: 'media_${DateTime.now().millisecondsSinceEpoch}',
                         type: selectedType,
@@ -2505,6 +2649,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         coverUrl: cover,
                         progressCurrent: 0,
                         progressTotal: total,
+                        personalNotes: notes,
+                        displayDate: DateTime.now(),
                       );
                       setState(() {
                         _mediaItems.insert(0, newItem);
@@ -2541,6 +2687,8 @@ class _HomeScreenState extends State<HomeScreen> {
     bool isSearchingCovers = false;
     List<CoverSearchResult> candidates = [];
     String? coverSearchMsg;
+    bool isFetchingInfo = false;
+    String? fetchInfoMsg;
 
     showDialog(
       context: context,
@@ -2618,6 +2766,84 @@ class _HomeScreenState extends State<HomeScreen> {
                           fillColor: _palette.bgSurface,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            icon: isFetchingInfo
+                                ? const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.search, size: 14),
+                            label: const Text('🔎 Fetch Info', style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _palette.accentPrimary,
+                              side: BorderSide(color: _palette.accentPrimary.withValues(alpha: 0.6)),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            ),
+                            onPressed: isFetchingInfo
+                                ? null
+                                : () async {
+                                    final title = titleController.text.trim();
+                                    if (title.isEmpty) {
+                                      setDState(() => fetchInfoMsg = 'Enter title first!');
+                                      return;
+                                    }
+                                    setDState(() {
+                                      isFetchingInfo = true;
+                                      fetchInfoMsg = null;
+                                    });
+                                    final info = await MediaInfoFetchService.fetchInfo(
+                                      title: title,
+                                      type: item.type,
+                                    );
+                                    setDState(() {
+                                      isFetchingInfo = false;
+                                      if (info != null) {
+                                        final parts = <String>[];
+                                        if (info.releaseYear != null) {
+                                          yearController.text = info.releaseYear.toString();
+                                          parts.add('${info.releaseYear}');
+                                        }
+                                        if (item.type == MediaType.tvShow && info.episodeCount != null) {
+                                          totalCapacityController.text = info.episodeCount.toString();
+                                          parts.add('${info.episodeCount} episodes');
+                                        } else if (item.type == MediaType.movie && info.runtimeMinutes != null) {
+                                          totalCapacityController.text = info.runtimeMinutes.toString();
+                                          parts.add('${info.runtimeMinutes} min');
+                                        }
+                                        if (parts.isNotEmpty) {
+                                          fetchInfoMsg = 'Fetched: ${parts.join(', ')}';
+                                        } else {
+                                          fetchInfoMsg = 'No extra info found for "$title".';
+                                        }
+                                      } else {
+                                        fetchInfoMsg = 'No info found for "$title".';
+                                      }
+                                    });
+                                  },
+                          ),
+                          if (fetchInfoMsg != null) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                fetchInfoMsg!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: fetchInfoMsg!.startsWith('Fetched:')
+                                      ? const Color(0xFF10B981)
+                                      : (fetchInfoMsg == 'Enter title first!' ? const Color(0xFFEF4444) : _palette.textMuted),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 10),
                       // Notes / Description
@@ -2970,6 +3196,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final notes = notesController.text.trim().isEmpty ? null : toSentenceCase(notesController.text.trim());
                     final cover = coverUrlController.text.trim().isEmpty ? null : coverUrlController.text.trim();
 
+                    final wasCompleted = item.isCompleted;
                     final updated = item.copyWith(
                       title: title,
                       releaseYear: yr,
@@ -2981,11 +3208,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       score: rating,
                       isOnHold: onHold,
                     );
+                    final nowCompleted = updated.isCompleted;
+                    DateTime newDisplayDate = item.displayDate;
+                    if (!wasCompleted && nowCompleted) {
+                      newDisplayDate = DateTime.now(); // Just finished
+                    } else if (wasCompleted && !nowCompleted) {
+                      newDisplayDate = DateTime.now(); // Re-opened
+                    }
+                    final finalUpdated = updated.copyWith(displayDate: newDisplayDate);
 
                     setState(() {
                       final idx = _mediaItems.indexWhere((m) => m.id == item.id);
                       if (idx != -1) {
-                        _mediaItems[idx] = updated;
+                        _mediaItems[idx] = finalUpdated;
                       }
                       // Decouple/update linked tasks if title changed
                       if (title != item.title) {
@@ -3029,18 +3264,7 @@ class _HomeScreenState extends State<HomeScreen> {
       .toList()
     ..sort(compareTaskExecutionState);
 
-  List<MediaItem> get _filteredMediaItems {
-    var list = _mediaItems.where((m) {
-      if (_mediaFilter == 'all') return true;
-      if (_mediaFilter == 'book' && m.type == MediaType.book) return true;
-      if (_mediaFilter == 'tvShow' && m.type == MediaType.tvShow) return true;
-      if (_mediaFilter == 'movie' && m.type == MediaType.movie) return true;
-      if (_mediaFilter == 'videoGame' && m.type == MediaType.videoGame) {
-        return true;
-      }
-      return false;
-    }).toList();
-
+  void _sortMediaBySelectedSorter(List<MediaItem> list) {
     switch (_mediaSort) {
       case 'score':
         list.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
@@ -3059,7 +3283,53 @@ class _HomeScreenState extends State<HomeScreen> {
         list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
     }
-    return list;
+  }
+
+  List<({MediaType type, List<MediaItem> items})> _partitionMediaByType(List<MediaItem> items) {
+    if (items.isEmpty) return const [];
+    if (_mediaFilter != 'all') {
+      final copy = List<MediaItem>.from(items);
+      _sortMediaBySelectedSorter(copy);
+      return [(type: copy.first.type, items: copy)];
+    }
+
+    final result = <({MediaType type, List<MediaItem> items})>[];
+    for (final t in MediaType.values) {
+      final matching = items.where((m) => m.type == t).toList();
+      if (matching.isNotEmpty) {
+        _sortMediaBySelectedSorter(matching);
+        result.add((type: t, items: matching));
+      }
+    }
+    return result;
+  }
+
+  List<MediaItem> get _filteredMediaItems {
+    var list = _mediaItems.where((m) {
+      if (_mediaFilter == 'all') return true;
+      if (_mediaFilter == 'book' && m.type == MediaType.book) return true;
+      if (_mediaFilter == 'tvShow' && m.type == MediaType.tvShow) return true;
+      if (_mediaFilter == 'movie' && m.type == MediaType.movie) return true;
+      if (_mediaFilter == 'videoGame' && m.type == MediaType.videoGame) {
+        return true;
+      }
+      return false;
+    }).toList();
+
+    final uncompleted = list.where((m) => !m.isCompleted && !m.isOnHold).toList();
+    final onHold = list.where((m) => !m.isCompleted && m.isOnHold).toList();
+    final finished = list.where((m) => m.isCompleted).toList();
+
+    List<MediaItem> flattenGroups(List<MediaItem> source) {
+      final groups = _partitionMediaByType(source);
+      return [for (final g in groups) ...g.items];
+    }
+
+    return [
+      ...flattenGroups(uncompleted),
+      ...flattenGroups(onHold),
+      ...flattenGroups(finished),
+    ];
   }
 
   @override
@@ -3073,6 +3343,8 @@ class _HomeScreenState extends State<HomeScreen> {
         palette: _palette,
         onSelectVibe: widget.onSelectVibe,
         onSelectFont: widget.onSelectFont,
+        fontSizeScale: widget.fontSizeScale,
+        onFontSizeScaleChanged: widget.onSelectFontSizeScale,
       ),
       body: SafeArea(
         child: Column(
@@ -3261,39 +3533,68 @@ class _HomeScreenState extends State<HomeScreen> {
     final backlog = _backlogTasks;
     final isViewingToday = DateNavigationService.isToday(_selectedDate);
 
-    final dailyTotal = daily.length;
+    final dailyActiveTasks = daily.where((t) => t.status != TaskStatus.canceled).toList();
+    final dailyTotal = dailyActiveTasks.length;
     final dailyDone = daily.where((t) => t.status == TaskStatus.done).length;
     final dailyCanceled = daily.where((t) => t.status == TaskStatus.canceled).length;
     final dailyProgress = dailyTotal == 0 ? 0.0 : (dailyDone / dailyTotal).clamp(0.0, 1.0);
 
-    final backlogTotal = backlog.length;
+    final backlogActiveTasks = backlog.where((t) => t.status != TaskStatus.canceled).toList();
+    final backlogTotal = backlogActiveTasks.length;
     final backlogDone = backlog.where((t) => t.status == TaskStatus.done).length;
     final backlogCanceled = backlog.where((t) => t.status == TaskStatus.canceled).length;
     final backlogProgress = backlogTotal == 0 ? 0.0 : (backlogDone / backlogTotal).clamp(0.0, 1.0);
 
-    return Listener(
-      onPointerMove: (e) => _lastPointerY = e.position.dy,
-      onPointerUp: (_) => _stopAutoScrollTimer(),
-      onPointerCancel: (_) => _stopAutoScrollTimer(),
-      child: ListView(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
-        children: [
-          ShamsiAgendaBanner(
-            events: _events,
-            palette: _palette,
-            selectedDate: _selectedDate,
-            onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
-            onToggleCheckpoint: _toggleShamsiCheckpoint,
-            onAddEvent: _addShamsiEvent,
-            onAddCustomEvent: _showAddCustomEventDialog,
-            onRemoveEvent: _removeShamsiEvent,
-          ),
-        const SizedBox(height: 18),
+    final taskCompletionMap = <String, ({int total, int done})>{};
+    for (final t in _tasks) {
+      if (t.targetDateJalali != null && t.category == TaskCategory.daily) {
+        if (t.status == TaskStatus.canceled) continue;
+        final key = t.targetDateJalali!;
+        final prev = taskCompletionMap[key] ?? (total: 0, done: 0);
+        final isDone = t.status == TaskStatus.done;
+        final updatedStats = (
+          total: prev.total + 1,
+          done: prev.done + (isDone ? 1 : 0),
+        );
+        taskCompletionMap[key] = updatedStats;
+        try {
+          final parsed = DateNavigationService.parseJalaliKey(key);
+          final stdKey = DateNavigationService.formatJalaliKey(parsed);
+          final unpaddedKey = '${parsed.year}-${parsed.month}-${parsed.day}';
+          taskCompletionMap[stdKey] = updatedStats;
+          taskCompletionMap[unpaddedKey] = updatedStats;
+        } catch (_) {}
+      }
+    }
 
-        // --- TODAY'S FOCUS SECTION ---
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Listener(
+            onPointerMove: (e) => _lastPointerY = e.position.dy,
+            onPointerUp: (_) => _stopAutoScrollTimer(),
+            onPointerCancel: (_) => _stopAutoScrollTimer(),
+            child: ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
+              children: [
+                ShamsiAgendaBanner(
+                  events: _events,
+                  palette: _palette,
+                  selectedDate: _selectedDate,
+                  onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
+                  onToggleCheckpoint: _toggleShamsiCheckpoint,
+                  onAddEvent: _addShamsiEvent,
+                  onAddCustomEvent: _showAddCustomEventDialog,
+                  onRemoveEvent: _removeShamsiEvent,
+                  taskCompletionMap: taskCompletionMap,
+                ),
+                const SizedBox(height: 18),
+
+                // --- TODAY'S FOCUS SECTION ---
+                Column(
+                  key: _focusSectionKey,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3487,6 +3788,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // --- ORBIT & BACKLOG SECTION ---
         Column(
+          key: _backlogSectionKey,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -3668,231 +3970,493 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ],
     ),
-  );
+  ),
+),
+Positioned(
+  top: 12,
+  bottom: 12,
+  right: 3,
+  child: FastScrollRail(
+    controller: _scrollController,
+    palette: _palette,
+    sections: [
+      FastScrollSection(
+        id: 'focus',
+        label: 'Focus',
+        icon: Icons.push_pin_rounded,
+        onTap: () {
+          _scrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+          );
+        },
+      ),
+      FastScrollSection(
+        id: 'orbit',
+        label: 'Orbit',
+        icon: Icons.public_rounded,
+        onTap: () {
+          if (_isBacklogCollapsed) {
+            setState(() => _isBacklogCollapsed = false);
+          }
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_backlogSectionKey.currentContext != null) {
+              Scrollable.ensureVisible(
+                _backlogSectionKey.currentContext!,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+                alignment: 0.05,
+              );
+            }
+          });
+        },
+      ),
+    ],
+  ),
+),
+],
+);
 }
 
-  Widget _buildEntertainmentView() {
-    final mediaList = _filteredMediaItems;
+  Widget _buildMediaCard(MediaItem item, {required bool isGrid}) {
+    return MediaCard(
+      key: ValueKey(item.id),
+      item: item,
+      palette: _palette,
+      isGrid: isGrid,
+      onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
+      onUpdateProgress: () => _showUpdateProgressDialog(item),
+      onEditCover: () => _showEditCoverDialog(item),
+      onScheduleToday: () => _scheduleMediaToday(item),
+      onEditNotes: () => _editMediaNotes(item),
+      onEditLabels: () => _showEditLabelsDialog(item),
+      onEditMedia: () => _showEditMediaDialog(item),
+      onDelete: () => _removeMediaItem(item.id),
+    );
+  }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildCategoryPill('all', '✨ All'),
-              const SizedBox(width: 6),
-              _buildCategoryPill('book', '📚 Books'),
-              const SizedBox(width: 6),
-              _buildCategoryPill('tvShow', '📺 TV Shows'),
-              const SizedBox(width: 6),
-              _buildCategoryPill('movie', '🎬 Movies'),
-              const SizedBox(width: 6),
-              _buildCategoryPill('videoGame', '🎮 Video Games'),
-            ],
-          ),
+  Widget _buildMediaChunk(List<MediaItem> items) {
+    if (_isMediaGrid) {
+      return GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.65,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
         ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Tracking ${mediaList.length} Items',
+        itemCount: items.length,
+        itemBuilder: (context, index) =>
+            _buildMediaCard(items[index], isGrid: true),
+      );
+    } else {
+      return Column(
+        children: items
+            .map((item) => _buildMediaCard(item, isGrid: false))
+            .toList(),
+      );
+    }
+  }
+
+  Widget _buildSectionDivider({
+    Key? key,
+    required String title,
+    required IconData icon,
+    required int count,
+  }) {
+    return Container(
+      key: key,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: _palette.accentPrimary),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+              color: _palette.accentPrimary,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color: _palette.bgElevated,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _palette.borderSubtle),
+            ),
+            child: Text(
+              '$count',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
                 color: _palette.textMuted,
               ),
             ),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: _palette.bgElevated,
-                    border: Border.all(color: _palette.borderSubtle),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      InkWell(
-                        onTap: () {
-                          setState(() => _isMediaGrid = false);
-                          widget.storage.saveMediaViewMode('list');
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: !_isMediaGrid
-                                ? _palette.bgSurface
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(
-                            Icons.view_agenda_outlined,
-                            size: 14,
-                            color: !_isMediaGrid
-                                ? _palette.textMain
-                                : _palette.textDim,
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () {
-                          setState(() => _isMediaGrid = true);
-                          widget.storage.saveMediaViewMode('grid');
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _isMediaGrid
-                                ? _palette.bgSurface
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(
-                            Icons.grid_view,
-                            size: 14,
-                            color: _isMediaGrid
-                                ? _palette.textMain
-                                : _palette.textDim,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _mediaSort,
-                    dropdownColor: _palette.bgElevated,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: _palette.textMain,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'custom',
-                        child: Text('Recently Added'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'score',
-                        child: Text('Highest Score'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'progress',
-                        child: Text('Most Progress'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'year',
-                        child: Text('Release Year'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'name',
-                        child: Text('Name (A-Z)'),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() => _mediaSort = val);
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: 6),
-                InkWell(
-                  onTap: _showAddMediaDialog,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _palette.accentPrimary,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      '+ Add',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Divider(
+              color: _palette.borderSubtle,
+              thickness: 1.5,
             ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (mediaList.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: Text(
-                'No media entries found in this category.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _palette.textDim,
-                  fontStyle: FontStyle.italic,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypeDivider(MediaType type, int count) {
+    final emoji = switch (type) {
+      MediaType.book => '📚',
+      MediaType.tvShow => '📺',
+      MediaType.movie => '🎬',
+      MediaType.videoGame => '🎮',
+    };
+    final name = switch (type) {
+      MediaType.book => 'Books',
+      MediaType.tvShow => 'TV Shows',
+      MediaType.movie => 'Movies',
+      MediaType.videoGame => 'Video Games',
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Text(
+            '$emoji $name',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: _palette.textMuted,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: _palette.bgElevated,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _palette.borderSubtle),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(fontSize: 9, color: _palette.textDim),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Divider(
+              color: _palette.borderSubtle.withValues(alpha: 0.7),
+              thickness: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildMediaGroupWidgets(
+    List<({MediaType type, List<MediaItem> items})> groups,
+  ) {
+    final widgets = <Widget>[];
+    for (int i = 0; i < groups.length; i++) {
+      final g = groups[i];
+      if (i > 0) {
+        widgets.add(_buildTypeDivider(g.type, g.items.length));
+      }
+      widgets.add(_buildMediaChunk(g.items));
+    }
+    return widgets;
+  }
+
+  Widget _buildEntertainmentView() {
+    final mediaList = _filteredMediaItems;
+
+    final uncompletedItems =
+        mediaList.where((m) => !m.isCompleted && !m.isOnHold).toList();
+    final onHoldItems =
+        mediaList.where((m) => !m.isCompleted && m.isOnHold).toList();
+    final finishedItems = mediaList.where((m) => m.isCompleted).toList();
+
+    final uncompletedGroups = _partitionMediaByType(uncompletedItems);
+    final onHoldGroups = _partitionMediaByType(onHoldItems);
+    final finishedGroups = _partitionMediaByType(finishedItems);
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ListView(
+            controller: _entertainmentScrollController,
+            padding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
+            children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildCategoryPill('all', '✨ All'),
+                    const SizedBox(width: 6),
+                    _buildCategoryPill('book', '📚 Books'),
+                    const SizedBox(width: 6),
+                    _buildCategoryPill('tvShow', '📺 TV Shows'),
+                    const SizedBox(width: 6),
+                    _buildCategoryPill('movie', '🎬 Movies'),
+                    const SizedBox(width: 6),
+                    _buildCategoryPill('videoGame', '🎮 Video Games'),
+                  ],
                 ),
               ),
-            ),
-          )
-        else if (_isMediaGrid)
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.65,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
-            itemCount: mediaList.length,
-            itemBuilder: (context, index) {
-              final item = mediaList[index];
-              return MediaCard(
-                key: ValueKey(item.id),
-                item: item,
-                palette: _palette,
-                isGrid: true,
-                onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
-                onUpdateProgress: () => _showUpdateProgressDialog(item),
-                onEditCover: () => _showEditCoverDialog(item),
-                onScheduleToday: () => _scheduleMediaToday(item),
-                onEditNotes: () => _editMediaNotes(item),
-                onEditLabels: () => _showEditLabelsDialog(item),
-                onEditMedia: () => _showEditMediaDialog(item),
-                onDelete: () => _removeMediaItem(item.id),
-              );
-            },
-          )
-        else
-          ...mediaList.map((item) {
-            return MediaCard(
-              key: ValueKey(item.id),
-              item: item,
-              palette: _palette,
-              isGrid: false,
-              onToggleOnHold: (val) => _toggleMediaOnHold(item, val),
-              onUpdateProgress: () => _showUpdateProgressDialog(item),
-              onEditCover: () => _showEditCoverDialog(item),
-              onScheduleToday: () => _scheduleMediaToday(item),
-              onEditNotes: () => _editMediaNotes(item),
-              onEditLabels: () => _showEditLabelsDialog(item),
-              onEditMedia: () => _showEditMediaDialog(item),
-              onDelete: () => _removeMediaItem(item.id),
-            );
-          }),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Tracking ${mediaList.length} Items',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: _palette.textMuted,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: _palette.bgElevated,
+                          border: Border.all(color: _palette.borderSubtle),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            InkWell(
+                              onTap: () {
+                                setState(() => _isMediaGrid = false);
+                                widget.storage.saveMediaViewMode('list');
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: !_isMediaGrid
+                                      ? _palette.bgSurface
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Icon(
+                                  Icons.view_agenda_outlined,
+                                  size: 14,
+                                  color: !_isMediaGrid
+                                      ? _palette.textMain
+                                      : _palette.textDim,
+                                ),
+                              ),
+                            ),
+                            InkWell(
+                              onTap: () {
+                                setState(() => _isMediaGrid = true);
+                                widget.storage.saveMediaViewMode('grid');
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _isMediaGrid
+                                      ? _palette.bgSurface
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Icon(
+                                  Icons.grid_view,
+                                  size: 14,
+                                  color: _isMediaGrid
+                                      ? _palette.textMain
+                                      : _palette.textDim,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _mediaSort,
+                          dropdownColor: _palette.bgElevated,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _palette.textMain,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'custom',
+                              child: Text('Recently Added'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'score',
+                              child: Text('Highest Score'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'progress',
+                              child: Text('Most Progress'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'year',
+                              child: Text('Release Year'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'name',
+                              child: Text('Name (A-Z)'),
+                            ),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _mediaSort = val);
+                              widget.storage.saveMediaSort(val);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: _showAddMediaDialog,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _palette.accentPrimary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            '+ Add',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (mediaList.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Text(
+                      'No media entries found in this category.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _palette.textDim,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                // Uncompleted Section
+                if (uncompletedGroups.isNotEmpty) ...[
+                  KeyedSubtree(
+                    key: _activeMediaKey,
+                    child: const SizedBox.shrink(),
+                  ),
+                  ..._buildMediaGroupWidgets(uncompletedGroups),
+                ],
+
+                // On-Hold Section
+                if (onHoldGroups.isNotEmpty) ...[
+                  _buildSectionDivider(
+                    key: _onHoldMediaKey,
+                    title: 'On-Hold',
+                    icon: Icons.pause_circle_outline,
+                    count: onHoldItems.length,
+                  ),
+                  ..._buildMediaGroupWidgets(onHoldGroups),
+                ],
+
+                // Finished Section
+                if (finishedGroups.isNotEmpty) ...[
+                  _buildSectionDivider(
+                    key: _finishedMediaKey,
+                    title: 'Finished',
+                    icon: Icons.check_circle_outline,
+                    count: finishedItems.length,
+                  ),
+                  ..._buildMediaGroupWidgets(finishedGroups),
+                ],
+              ],
+            ],
+          ),
+        ),
+        Positioned(
+          top: 12,
+          bottom: 12,
+          right: 3,
+          child: FastScrollRail(
+            controller: _entertainmentScrollController,
+            palette: _palette,
+            sections: [
+              FastScrollSection(
+                id: 'active',
+                label: 'Active',
+                icon: Icons.play_arrow_rounded,
+                isEnabled: uncompletedItems.isNotEmpty,
+                onTap: () {
+                  _entertainmentScrollController.animateTo(
+                    0.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                  );
+                },
+              ),
+              FastScrollSection(
+                id: 'onHold',
+                label: 'Hold',
+                icon: Icons.pause_rounded,
+                isEnabled: onHoldItems.isNotEmpty,
+                onTap: () {
+                  if (_onHoldMediaKey.currentContext != null) {
+                    Scrollable.ensureVisible(
+                      _onHoldMediaKey.currentContext!,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      alignment: 0.05,
+                    );
+                  }
+                },
+              ),
+              FastScrollSection(
+                id: 'finished',
+                label: 'Done',
+                icon: Icons.check_circle_outline_rounded,
+                isEnabled: finishedItems.isNotEmpty,
+                onTap: () {
+                  if (_finishedMediaKey.currentContext != null) {
+                    Scrollable.ensureVisible(
+                      _finishedMediaKey.currentContext!,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      alignment: 0.05,
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

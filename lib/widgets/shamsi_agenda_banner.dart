@@ -15,6 +15,7 @@ class ShamsiAgendaBanner extends StatefulWidget {
   final Function(ShamsiEvent)? onRemoveEvent;
   final Jalali? selectedDate;
   final Function(Jalali)? onDateChanged;
+  final Map<String, ({int total, int done})>? taskCompletionMap;
 
   const ShamsiAgendaBanner({
     super.key,
@@ -26,6 +27,7 @@ class ShamsiAgendaBanner extends StatefulWidget {
     this.onRemoveEvent,
     this.selectedDate,
     this.onDateChanged,
+    this.taskCompletionMap,
   });
 
   @override
@@ -212,7 +214,7 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '$monthName ${_toPersianDigits(_selectedDate.year)}',
+                        '$monthName\u00A0${_toPersianDigits(_selectedDate.year)}',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -470,6 +472,12 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                             _selectedDate.month == todayJalali.month &&
                             dayNum == todayJalali.day;
 
+                        final dayKey = DateNavigationService.formatJalaliKey(
+                          Jalali(_selectedDate.year, _selectedDate.month, dayNum),
+                        );
+                        final altKey = '${_selectedDate.year}-${_selectedDate.month}-$dayNum';
+                        final stats = widget.taskCompletionMap?[dayKey] ?? widget.taskCompletionMap?[altKey];
+
                         return InkWell(
                           onTap: () {
                             _changeDate(
@@ -525,6 +533,21 @@ class _ShamsiAgendaBannerState extends State<ShamsiAgendaBanner> {
                                       decoration: BoxDecoration(
                                         color: dotColor,
                                         shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                if (stats != null && stats.total > 0)
+                                  Positioned(
+                                    bottom: 0,
+                                    left: 4,
+                                    right: 4,
+                                    child: Container(
+                                      height: 2,
+                                      decoration: BoxDecoration(
+                                        color: stats.done >= stats.total
+                                            ? const Color(0xFF10B981) // All done: emerald
+                                            : widget.palette.accentPrimary.withValues(alpha: 0.6), // Incomplete: accent
+                                        borderRadius: BorderRadius.circular(1),
                                       ),
                                     ),
                                   ),

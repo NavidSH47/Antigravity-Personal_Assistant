@@ -317,62 +317,37 @@ class TaskCard extends StatelessWidget {
                             ),
                           )
                         else if (task.category == TaskCategory.daily && onDemoteToBacklog != null)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              InkWell(
-                                onTap: onDemoteToBacklog,
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: palette.borderSubtle),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.move_to_inbox,
-                                        size: 12,
-                                        color: palette.textMuted,
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        'To Backlog',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: palette.textMuted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                          InkWell(
+                            onTap: onDemoteToBacklog,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
                               ),
-                              if (task.linkedMediaId != null) ...[
-                                const SizedBox(width: 8),
-                                Text(
-                                  '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: palette.accentPrimary,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: palette.borderSubtle),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.move_to_inbox,
+                                    size: 12,
+                                    color: palette.textMuted,
                                   ),
-                                ),
-                              ],
-                            ],
-                          )
-                        else if (task.linkedMediaId != null)
-                          Text(
-                            '+${task.mediaUnitsToAdvance?.toInt() ?? 0} on check',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: palette.accentPrimary,
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'To Backlog',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: palette.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                       ],

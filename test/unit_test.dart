@@ -24,6 +24,11 @@ import 'package:nsh_assistant/widgets/safe_cover_image.dart';
 import 'package:nsh_assistant/widgets/shamsi_agenda_banner.dart';
 import 'package:nsh_assistant/widgets/media_card.dart';
 import 'package:nsh_assistant/services/rtl_detection_service.dart';
+import 'package:nsh_assistant/services/media_info_fetch_service.dart';
+import 'package:nsh_assistant/services/storage_service.dart';
+import 'package:nsh_assistant/widgets/settings_drawer.dart';
+import 'package:nsh_assistant/widgets/fast_scroll_rail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('Task Model & 3-State Transitions', () {
@@ -914,7 +919,9 @@ void main() {
         ),
       );
 
-      expect(find.text('+25 on check'), findsOneWidget);
+      expect(find.text('+25 on check'), findsNothing);
+      expect(find.text('🎯 Media Goal: Dune'), findsOneWidget);
+      expect(find.text('• +25'), findsOneWidget);
       expect(find.text('Due Today'), findsNothing);
     });
 
@@ -1190,7 +1197,7 @@ void main() {
       expect(find.text('Cyberpunk 2077'), findsOneWidget);
       expect(find.text('RPG'), findsOneWidget);
       expect(find.text('Sci-Fi'), findsOneWidget);
-      expect(find.text('📝 "Finished Phantom Liberty expansion."'), findsOneWidget);
+      expect(find.text('📝 Finished Phantom Liberty expansion.'), findsOneWidget);
       expect(find.text('+ Update'), findsOneWidget);
       expect(find.text('Schedule Today'), findsOneWidget);
     });
@@ -1634,6 +1641,863 @@ void main() {
       expect(results.any((r) => r.source == 'Wikipedia'), isTrue);
       expect(results.firstWhere((r) => r.source == 'LaunchBox').coverUrl, 'https://images.launchbox-app.com/colossus-front.jpg');
       expect(results.firstWhere((r) => r.source == 'Wikipedia').coverUrl, 'https://upload.wikimedia.org/wikipedia/en/thumb/colossus.jpg');
+    });
+
+    test('God of War 3, Minish Cap, and Bloodborne cover resolution with LaunchBox alt matching and Wikipedia pilicense=any', () async {
+      final mockClient = MockClient((request) async {
+        final host = request.url.host;
+        final query = request.url.query;
+
+        // LaunchBox Bloodborne with real HTML card structures
+        if (host == 'gamesdb.launchbox-app.com') {
+          return http.Response('''
+            <div class="gameCard">
+              <div class="cardImgPart">
+                <img src="https://images.launchbox-app.com/1e88a41b-c210.jpg" alt="Bloodborne (Port)" />
+              </div>
+            </div>
+            <div class="gameCard">
+              <div class="cardImgPart">
+                <img src="https://images.launchbox-app.com/r2_215c7930-3f01.jpeg" alt="Bloodborne" />
+              </div>
+            </div>
+            <div class="gameCard">
+              <div class="cardImgPart">
+                <img src="https://images.launchbox-app.com/unrelated-game.png" alt="Unrelated Game" />
+              </div>
+            </div>
+          ''', 200, headers: {'content-type': 'text/html; charset=utf-8'});
+        }
+
+        // Wikipedia with pilicense=any
+        if (host == 'en.wikipedia.org') {
+          if (query.contains('God%20of%20War%20III') || query.contains('God+of+War+III')) {
+            return http.Response(jsonEncode({
+              'query': {
+                'pages': [
+                  {
+                    'title': 'God of War III',
+                    'thumbnail': {
+                      'source': 'https://upload.wikimedia.org/wikipedia/en/8/8b/God_of_War_III_cover_art.jpg',
+                    }
+                  }
+                ]
+              }
+            }), 200);
+          } else if (query.contains('Minish%20Cap') || query.contains('Minish+Cap')) {
+            return http.Response(jsonEncode({
+              'query': {
+                'pages': [
+                  {
+                    'title': 'The Legend of Zelda: The Minish Cap',
+                    'thumbnail': {
+                      'source': 'https://upload.wikimedia.org/wikipedia/en/0/0a/TLOZ-_Minish_Cap_NA_Box_art.png',
+                    }
+                  }
+                ]
+              }
+            }), 200);
+          }
+        }
+
+        // Steam returning unrelated DLC for God of War 3
+        if (host == 'store.steampowered.com') {
+          return http.Response(jsonEncode({
+            'items': [
+              {
+                'id': 694780,
+                'name': 'SUPER ARMY OF TENTACLES 3, Winter Outfit Pack I: War of the Old Gods',
+                'tiny_image': 'https://shared.akamai.steamstatic.com/apps/694780/capsule_231x87.jpg',
+              }
+            ]
+          }), 200);
+        }
+
+        return http.Response('Not found', 404);
+      });
+
+      // 1. Bloodborne verifies exact match prioritized and unrelated Korean images rejected
+      final bbResults = await CoverFetchService.searchCovers(
+        query: 'Bloodborne',
+        type: MediaType.videoGame,
+        client: mockClient,
+      );
+      expect(bbResults, isNotEmpty);
+      expect(bbResults.first.coverUrl, 'https://images.launchbox-app.com/r2_215c7930-3f01.jpeg');
+      expect(bbResults.any((r) => r.coverUrl.contains('unrelated-game')), isFalse);
+
+      // 2. God of War 3 verifies Roman numeral mapping and Steam unrelated DLC rejection
+      final gowResults = await CoverFetchService.searchCovers(
+        query: 'God of War 3',
+        type: MediaType.videoGame,
+        client: mockClient,
+      );
+      expect(gowResults, isNotEmpty);
+      expect(gowResults.any((r) => r.source == 'Wikipedia' && r.coverUrl.contains('God_of_War_III_cover_art.jpg')), isTrue);
+      // Unrelated tentacle DLC must be rejected
+      expect(gowResults.any((r) => r.title.contains('SUPER ARMY OF TENTACLES')), isFalse);
+
+      // 3. The Legend of Zelda: The Minish Cap finds authentic box art
+      final zeldaResults = await CoverFetchService.searchCovers(
+        query: 'The Legend of Zelda: The Minish Cap',
+        type: MediaType.videoGame,
+        client: mockClient,
+      );
+      expect(zeldaResults, isNotEmpty);
+      expect(zeldaResults.first.coverUrl, 'https://upload.wikimedia.org/wikipedia/en/0/0a/TLOZ-_Minish_Cap_NA_Box_art.png');
+    });
+  });
+
+  group('23. Completed (100%) Media Done State, Down-Listing, & Green Visual Styling', () {
+    test('MediaItem.isCompleted and isDone identify 100% completion accurately', () {
+      final incomplete = MediaItem(
+        id: '1',
+        type: MediaType.book,
+        title: 'Dune',
+        releaseYear: 1965,
+        progressCurrent: 200,
+        progressTotal: 500,
+      );
+      expect(incomplete.isCompleted, isFalse);
+      expect(incomplete.isDone, isFalse);
+
+      final completedExact = MediaItem(
+        id: '2',
+        type: MediaType.book,
+        title: 'Dune Messiah',
+        releaseYear: 1969,
+        progressCurrent: 300,
+        progressTotal: 300,
+      );
+      expect(completedExact.isCompleted, isTrue);
+      expect(completedExact.isDone, isTrue);
+
+      final completedExceed = completedExact.copyWith(progressCurrent: 350);
+      expect(completedExceed.isCompleted, isTrue);
+      expect(completedExceed.isDone, isTrue);
+
+      final zeroTotal = completedExact.copyWith(progressTotal: 0);
+      expect(zeroTotal.isCompleted, isFalse);
+    });
+
+    test('compareMediaExecutionState partitions active items before completed items', () {
+      final active1 = MediaItem(id: 'a1', type: MediaType.book, title: 'Active 1', releaseYear: 2020, progressCurrent: 10, progressTotal: 100);
+      final active2 = MediaItem(id: 'a2', type: MediaType.book, title: 'Active 2', releaseYear: 2021, progressCurrent: 90, progressTotal: 100);
+      final done1 = MediaItem(id: 'd1', type: MediaType.book, title: 'Done 1', releaseYear: 2022, progressCurrent: 100, progressTotal: 100);
+      final done2 = MediaItem(id: 'd2', type: MediaType.book, title: 'Done 2', releaseYear: 2023, progressCurrent: 100, progressTotal: 100);
+
+      expect(compareMediaExecutionState(active1, done1), -1);
+      expect(compareMediaExecutionState(done1, active1), 1);
+      expect(compareMediaExecutionState(active1, active2), 0);
+      expect(compareMediaExecutionState(done1, done2), 0);
+
+      final list = [done1, active1, done2, active2];
+      final active = list.where((m) => !m.isCompleted).toList();
+      final done = list.where((m) => m.isCompleted).toList();
+      final sorted = [...active, ...done];
+
+      expect(sorted.map((m) => m.id).toList(), ['a1', 'a2', 'd1', 'd2']);
+    });
+
+    test('MediaGoalSyncService blocks scheduling when media item is completed', () {
+      final completed = MediaItem(
+        id: 'c1',
+        type: MediaType.movie,
+        title: 'Oppenheimer',
+        releaseYear: 2023,
+        progressCurrent: 180,
+        progressTotal: 180,
+      );
+
+      expect(MediaGoalSyncService.canSchedule(completed), isFalse);
+      final validationMsg = MediaGoalSyncService.validateGoalAmount(30, completed);
+      expect(validationMsg, contains('already completed'));
+
+      final incomplete = completed.copyWith(progressCurrent: 90);
+      expect(MediaGoalSyncService.canSchedule(incomplete), isTrue);
+      expect(MediaGoalSyncService.validateGoalAmount(30, incomplete), isNull);
+    });
+
+    testWidgets('MediaCard renders emerald green border and Completed badge when 100%', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final completedItem = MediaItem(
+        id: 'done_1',
+        type: MediaType.videoGame,
+        title: 'Elden Ring',
+        releaseYear: 2022,
+        progressCurrent: 50,
+        progressTotal: 50,
+      );
+
+      bool scheduleTapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: completedItem,
+              palette: palette,
+              isGrid: false,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () => scheduleTapped = true,
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Verify "Completed" indicator is displayed instead of "Schedule Today"
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Schedule Today'), findsNothing);
+      expect(scheduleTapped, isFalse);
+      expect(find.text('Done'), findsOneWidget); // Cover overlay badge
+
+      // Container border must be emerald green (0x8010B981)
+      final container = tester.widget<Container>(
+        find.descendant(
+          of: find.byType(GestureDetector).first,
+          matching: find.byType(Container),
+        ).first,
+      );
+      final decoration = container.decoration as BoxDecoration;
+      final border = decoration.border as Border;
+      expect(border.top.color, const Color(0x8010B981));
+      expect(border.top.width, 1.5);
+    });
+
+    testWidgets('MediaCard grid view renders emerald green border and Completed badge when 100%', (tester) async {
+      final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+      final completedItem = MediaItem(
+        id: 'done_grid',
+        type: MediaType.book,
+        title: 'Neuromancer',
+        releaseYear: 1984,
+        progressCurrent: 271,
+        progressTotal: 271,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: completedItem,
+              palette: palette,
+              isGrid: true,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ),
+      );
+
+      // In grid view, "Completed" badge replaces "Schedule"
+      expect(find.text('Completed'), findsOneWidget);
+      expect(find.text('Schedule'), findsNothing);
+      expect(find.text('Done'), findsOneWidget); // Cover badge
+
+      // Container border must be emerald green (0x8010B981)
+      final container = tester.widget<Container>(
+        find.descendant(
+          of: find.byType(GestureDetector).first,
+          matching: find.byType(Container),
+        ).first,
+      );
+      final decoration = container.decoration as BoxDecoration;
+      final border = decoration.border as Border;
+      expect(border.top.color, const Color(0x8010B981));
+      expect(border.top.width, 1.5);
+    });
+
+    group('24. Version 2.5.0 SDD Verification Suite', () {
+      testWidgets('3.4.1 Hold button hidden on completed media items (list and grid)', (tester) async {
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        final activeItem = MediaItem(
+          id: 'act1',
+          type: MediaType.book,
+          title: 'Active Book',
+          releaseYear: 2023,
+          progressCurrent: 50,
+          progressTotal: 100,
+        );
+        final completedItem = MediaItem(
+          id: 'comp1',
+          type: MediaType.book,
+          title: 'Completed Book',
+          releaseYear: 2023,
+          progressCurrent: 100,
+          progressTotal: 100,
+        );
+
+        // 1. List Card - Active: Hold is visible
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: activeItem,
+              palette: palette,
+              isGrid: false,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+        expect(find.text('Hold'), findsOneWidget);
+
+        // 2. List Card - Completed: Hold is hidden
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: completedItem,
+              palette: palette,
+              isGrid: false,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+        expect(find.text('Hold'), findsNothing);
+
+        // 3. Grid Card - Active: Active text is visible
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: activeItem,
+              palette: palette,
+              isGrid: true,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+        expect(find.text('▶ Active'), findsOneWidget);
+
+        // 4. Grid Card - Completed: Active/On-hold text is hidden
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: completedItem,
+              palette: palette,
+              isGrid: true,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+        expect(find.text('▶ Active'), findsNothing);
+        expect(find.text('⏸ On-hold'), findsNothing);
+      });
+
+      testWidgets('3.4.2 Reversed Shamsi date order in top bar', (tester) async {
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        final testDate = Jalali(1405, 8, 21); // 21 Aban 1405
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: ShamsiAgendaBanner(
+              events: const [],
+              palette: palette,
+              selectedDate: testDate,
+            ),
+          ),
+        ));
+
+        // Top bar date formatted as '$monthName\u00A0${_toPersianDigits(1405)}'
+        expect(find.text('آبان\u00A0۱۴۰۵'), findsOneWidget);
+      });
+
+      testWidgets('3.4.3 Quotation marks removed from media descriptions', (tester) async {
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        final item = MediaItem(
+          id: 'desc1',
+          type: MediaType.book,
+          title: 'Dune',
+          releaseYear: 1965,
+          progressCurrent: 10,
+          progressTotal: 100,
+          personalNotes: 'Masterpiece of science fiction',
+        );
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: item,
+              palette: palette,
+              isGrid: false,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+
+        expect(find.text('📝 Masterpiece of science fiction'), findsOneWidget);
+        expect(find.text('📝 "Masterpiece of science fiction"'), findsNothing);
+      });
+
+      test('3.4.4 Description field in MediaItem model and serialization', () {
+        final item = MediaItem(
+          id: 'notes_test',
+          type: MediaType.videoGame,
+          title: 'Hollow Knight',
+          releaseYear: 2017,
+          progressCurrent: 10,
+          progressTotal: 100,
+          personalNotes: 'Best metroidvania ever',
+        );
+
+        expect(item.personalNotes, 'Best metroidvania ever');
+        final jsonMap = item.toJson();
+        expect(jsonMap['personalNotes'], 'Best metroidvania ever');
+
+        final restored = MediaItem.fromJson(jsonMap);
+        expect(restored.personalNotes, 'Best metroidvania ever');
+
+        final updated = item.copyWith(personalNotes: 'Updated notes');
+        expect(updated.personalNotes, 'Updated notes');
+      });
+
+      test('3.4.5 MediaInfoFetchService fetches TV show episodes, movie runtime, and books/games year', () async {
+        final mockClient = MockClient((request) async {
+          final url = request.url.toString();
+          if (url.contains('api.tvmaze.com/singlesearch/shows')) {
+            return http.Response(
+              jsonEncode({
+                'name': 'Severance',
+                'premiered': '2022-02-18',
+                '_embedded': {
+                  'episodes': [
+                    {'id': 1}, {'id': 2}, {'id': 3}, {'id': 4}, {'id': 5},
+                    {'id': 6}, {'id': 7}, {'id': 8}, {'id': 9}
+                  ]
+                }
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          } else if (url.contains('itunes.apple.com/search') && url.contains('entity=movie')) {
+            return http.Response(
+              jsonEncode({
+                'results': [
+                  {
+                    'trackName': 'Oppenheimer',
+                    'releaseDate': '2023-07-21T07:00:00Z',
+                    'trackTimeMillis': 10800000 // 180 min
+                  }
+                ]
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          } else if (url.contains('openlibrary.org/search.json')) {
+            return http.Response(
+              jsonEncode({
+                'docs': [
+                  {
+                    'title': 'Dune',
+                    'first_publish_year': 1965
+                  }
+                ]
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          } else if (url.contains('en.wikipedia.org/api/rest_v1/page/summary')) {
+            return http.Response(
+              jsonEncode({
+                'title': 'Elden Ring',
+                'extract': 'Elden Ring is a 2022 action role-playing game developed by FromSoftware.'
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('Not Found', 404);
+        });
+
+        // TV Show
+        final tvInfo = await MediaInfoFetchService.fetchInfo(
+          title: 'Severance',
+          type: MediaType.tvShow,
+          client: mockClient,
+        );
+        expect(tvInfo, isNotNull);
+        expect(tvInfo!.releaseYear, 2022);
+        expect(tvInfo.episodeCount, 9);
+
+        // Movie
+        final movieInfo = await MediaInfoFetchService.fetchInfo(
+          title: 'Oppenheimer',
+          type: MediaType.movie,
+          client: mockClient,
+        );
+        expect(movieInfo, isNotNull);
+        expect(movieInfo!.releaseYear, 2023);
+        expect(movieInfo.runtimeMinutes, 180);
+
+        // Book
+        final bookInfo = await MediaInfoFetchService.fetchInfo(
+          title: 'Dune',
+          type: MediaType.book,
+          client: mockClient,
+        );
+        expect(bookInfo, isNotNull);
+        expect(bookInfo!.releaseYear, 1965);
+
+        // Video Game
+        final gameInfo = await MediaInfoFetchService.fetchInfo(
+          title: 'Elden Ring',
+          type: MediaType.videoGame,
+          client: mockClient,
+        );
+        expect(gameInfo, isNotNull);
+        expect(gameInfo!.releaseYear, 2022);
+
+        // Empty title returns null
+        final emptyInfo = await MediaInfoFetchService.fetchInfo(
+          title: '   ',
+          type: MediaType.movie,
+          client: mockClient,
+        );
+        expect(emptyInfo, isNull);
+      });
+
+      test('3.4.6 Default event deletion fix via deleted-event-ID exclusion set', () async {
+        SharedPreferences.setMockInitialValues({});
+        final storage = await StorageService.init();
+
+        final initialEvents = storage.loadShamsiEvents();
+        expect(initialEvents.any((e) => e.id == 'b_maryam'), isTrue);
+
+        await storage.addDeletedEventId('b_maryam');
+        expect(storage.loadDeletedEventIds(), contains('b_maryam'));
+
+        final eventsAfterDelete = storage.loadShamsiEvents();
+        expect(eventsAfterDelete.any((e) => e.id == 'b_maryam'), isFalse);
+      });
+
+      test('3.4.7 Persistent media sort preference in storage service', () async {
+        SharedPreferences.setMockInitialValues({});
+        final storage = await StorageService.init();
+
+        expect(storage.loadMediaSort(), 'custom');
+
+        await storage.saveMediaSort('score');
+        expect(storage.loadMediaSort(), 'score');
+
+        await storage.saveMediaSort('name');
+        expect(storage.loadMediaSort(), 'name');
+      });
+
+      testWidgets('3.4.8 Redundant "+N on check" label is removed from task card bottom row', (tester) async {
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        final task = Task(
+          id: 'task_linked_1',
+          title: 'Read chapter 3',
+          category: TaskCategory.daily,
+          linkedMediaId: 'media_123',
+          mediaUnitsToAdvance: 15.0,
+          mediaTitle: 'Neuromancer',
+        );
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: TaskCard(
+              task: task,
+              palette: palette,
+              onStatusChange: (_) {},
+              onDemoteToBacklog: () {},
+            ),
+          ),
+        ));
+
+        expect(find.text('To Backlog'), findsOneWidget);
+        expect(find.text('+15 on check'), findsNothing);
+        expect(find.text('🎯 Media Goal: Neuromancer'), findsOneWidget);
+        expect(find.text('• +15'), findsOneWidget);
+      });
+
+      testWidgets('3.4.9 Global font size scaling in appearance settings and storage', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final storage = await StorageService.init();
+
+        expect(storage.loadFontSizeScale(), 1.0);
+        await storage.saveFontSizeScale(1.2);
+        expect(storage.loadFontSizeScale(), 1.2);
+
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        double changedScale = 1.0;
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: SettingsDrawer(
+              currentVibe: ThemeVibe.deepAmethyst,
+              currentFont: AppFontStyle.defaultSans,
+              palette: palette,
+              fontSizeScale: 1.2,
+              onSelectVibe: (_) {},
+              onSelectFont: (_) {},
+              onFontSizeScaleChanged: (val) => changedScale = val,
+            ),
+          ),
+        ));
+
+        expect(changedScale, 1.0);
+
+        await tester.scrollUntilVisible(
+          find.text('FONT SIZE'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('FONT SIZE'), findsOneWidget);
+        expect(find.text('Aa — 120%'), findsOneWidget);
+        expect(find.byType(Slider), findsOneWidget);
+      });
+
+      testWidgets('3.4.10 Smart created/completed date tracking on media tiles', (tester) async {
+        final now = DateTime(2026, 11, 17);
+        final item = MediaItem(
+          id: 'date_test',
+          type: MediaType.tvShow,
+          title: 'Severance',
+          releaseYear: 2022,
+          progressCurrent: 9,
+          progressTotal: 9,
+          createdAt: now,
+          displayDate: now,
+        );
+
+        // Serialization test
+        final jsonMap = item.toJson();
+        expect(jsonMap['displayDate'], now.toIso8601String());
+        final restored = MediaItem.fromJson(jsonMap);
+        expect(restored.displayDate, now);
+
+        // Fallback test
+        final mapWithoutDisplay = Map<String, dynamic>.from(jsonMap)..remove('displayDate');
+        final restoredFallback = MediaItem.fromJson(mapWithoutDisplay);
+        expect(restoredFallback.displayDate, now);
+
+        // advanceProgress lifecycle transition test
+        final incomplete = item.copyWith(progressCurrent: 8);
+        final advanced = MediaGoalSyncService.advanceProgress(incomplete, 1);
+        expect(advanced.isCompleted, isTrue);
+
+        // revertProgress lifecycle transition test
+        final reverted = MediaGoalSyncService.revertProgress(item, 1);
+        expect(reverted.isCompleted, isFalse);
+
+        // Render card test (shows Nov 17, 2026)
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: item,
+              palette: palette,
+              isGrid: false,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+        expect(find.text('Nov 17, 2026'), findsOneWidget);
+
+        // In Grid view as well
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MediaCard(
+              item: item,
+              palette: palette,
+              isGrid: true,
+              onToggleOnHold: (_) {},
+              onUpdateProgress: () {},
+              onEditCover: () {},
+              onScheduleToday: () {},
+              onEditNotes: () {},
+              onEditLabels: () {},
+            ),
+          ),
+        ));
+        expect(find.text('Nov 17, 2026'), findsOneWidget);
+      });
+
+      testWidgets('3.4.11 Incomplete-day and all-done visual indicator in Shamsi calendar grid', (tester) async {
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        final testDate = Jalali(1405, 8, 15);
+        final taskCompletionMap = <String, ({int total, int done})>{
+          '1405-08-10': (total: 3, done: 1), // Incomplete day
+          '1405-08-12': (total: 2, done: 2), // All done day
+        };
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ShamsiAgendaBanner(
+                events: const [],
+                palette: palette,
+                selectedDate: testDate,
+                taskCompletionMap: taskCompletionMap,
+              ),
+            ),
+          ),
+        ));
+
+        // Tap the "Calendar" button to expand the calendar grid
+        await tester.tap(find.text('Calendar'));
+        await tester.pumpAndSettle();
+
+        // Underline indicators are rendered as 2dp high containers at bottom of days
+        final bars = tester.widgetList<Container>(
+          find.byWidgetPredicate((widget) {
+            if (widget is Container && widget.decoration is BoxDecoration) {
+              final box = widget.decoration as BoxDecoration;
+              if (box.borderRadius != null && widget.constraints?.maxHeight == 2) {
+                return true;
+              }
+            }
+            return false;
+          }),
+        );
+
+        // There should be indicator bars rendered for days with tasks
+        expect(bars.isNotEmpty, isTrue);
+      });
+    });
+
+    group('25. Version 2.6.0 Feature Verification Suite', () {
+      test('1. Canceled tasks do not count in daily total (0/1 becomes 0/0 Done)', () {
+        final task1 = Task(id: '1', title: 'Task 1', status: TaskStatus.canceled, category: TaskCategory.daily);
+        final daily = [task1];
+        final dailyActiveTasks = daily.where((t) => t.status != TaskStatus.canceled).toList();
+        final dailyTotal = dailyActiveTasks.length;
+        final dailyDone = daily.where((t) => t.status == TaskStatus.done).length;
+        expect(dailyTotal, 0);
+        expect(dailyDone, 0);
+        final badge = '$dailyDone/$dailyTotal Done';
+        expect(badge, '0/0 Done');
+      });
+
+      test('2. Media ordering: uncompleted first, then on-hold, then finished', () {
+        final uncompleted = MediaItem(id: '1', type: MediaType.movie, title: 'Active Movie', releaseYear: 2024, progressCurrent: 10, progressTotal: 100);
+        final onHold = MediaItem(id: '2', type: MediaType.book, title: 'OnHold Book', releaseYear: 2023, progressCurrent: 20, progressTotal: 100, isOnHold: true);
+        final finished = MediaItem(id: '3', type: MediaType.tvShow, title: 'Finished TV', releaseYear: 2022, progressCurrent: 10, progressTotal: 10);
+
+        final list = [finished, onHold, uncompleted];
+        final uncompletedList = list.where((m) => !m.isCompleted && !m.isOnHold).toList();
+        final onHoldList = list.where((m) => !m.isCompleted && m.isOnHold).toList();
+        final finishedList = list.where((m) => m.isCompleted).toList();
+
+        expect(uncompletedList.single.id, '1');
+        expect(onHoldList.single.id, '2');
+        expect(finishedList.single.id, '3');
+      });
+
+      test('3. MediaInfoFetchService fetches movie info with Cinemeta metadata fallback', () async {
+        final mockClient = MockClient((request) async {
+          final url = request.url.toString();
+          if (url.contains('itunes.apple.com/search') && url.contains('country=US')) {
+            return http.Response(jsonEncode({'resultCount': 0, 'results': []}), 200, headers: {'content-type': 'application/json'});
+          } else if (url.contains('v3-cinemeta.strem.io/catalog/movie/top/search=')) {
+            return http.Response(
+              jsonEncode({
+                'metas': [
+                  {
+                    'id': 'tt1375666',
+                    'name': 'Inception',
+                    'releaseInfo': '2010',
+                  }
+                ]
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          } else if (url.contains('v3-cinemeta.strem.io/meta/movie/tt1375666.json')) {
+            return http.Response(
+              jsonEncode({
+                'meta': {
+                  'id': 'tt1375666',
+                  'name': 'Inception',
+                  'year': '2010',
+                  'runtime': '148 min',
+                }
+              }),
+              200,
+              headers: {'content-type': 'application/json'},
+            );
+          }
+          return http.Response('Not Found', 404);
+        });
+
+        final info = await MediaInfoFetchService.fetchInfo(
+          title: 'Inception',
+          type: MediaType.movie,
+          client: mockClient,
+        );
+        expect(info, isNotNull);
+        expect(info!.releaseYear, 2010);
+        expect(info.runtimeMinutes, 148);
+      });
+
+      testWidgets('4. FastScrollRail renders quick-jump sections and triggers callbacks', (tester) async {
+        final controller = ScrollController();
+        final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
+        bool activeTapped = false;
+        bool holdTapped = false;
+        bool doneTapped = false;
+
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: FastScrollRail(
+              controller: controller,
+              palette: palette,
+              sections: [
+                FastScrollSection(id: 'active', label: 'Active', icon: Icons.play_arrow, onTap: () => activeTapped = true),
+                FastScrollSection(id: 'onHold', label: 'Hold', icon: Icons.pause, onTap: () => holdTapped = true),
+                FastScrollSection(id: 'finished', label: 'Done', icon: Icons.check, onTap: () => doneTapped = true),
+              ],
+            ),
+          ),
+        ));
+
+        expect(find.byType(FastScrollRail), findsOneWidget);
+        expect(find.byIcon(Icons.play_arrow), findsOneWidget);
+        expect(find.byIcon(Icons.pause), findsOneWidget);
+        expect(find.byIcon(Icons.check), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.pause));
+        expect(holdTapped, isTrue);
+
+        await tester.tap(find.byIcon(Icons.check));
+        expect(doneTapped, isTrue);
+      });
     });
   });
 }

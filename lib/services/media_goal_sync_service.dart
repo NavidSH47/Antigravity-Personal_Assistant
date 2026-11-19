@@ -30,10 +30,16 @@ class MediaGoalSyncService {
     }
   }
 
+  /// Checks whether a media item can be scheduled for a daily goal.
+  static bool canSchedule(MediaItem item) => !item.isCompleted;
+
   /// Validates input amount against boundary constraints (amount > 0 and <= remaining).
   static String? validateGoalAmount(double? amount, MediaItem item) {
     if (amount == null || amount <= 0) {
       return 'Amount must be greater than 0.';
+    }
+    if (item.isCompleted) {
+      return 'This media item is already completed (100%) and cannot be scheduled again.';
     }
     final remaining = remainingUnits(item);
     if (amount > remaining) {
@@ -73,14 +79,24 @@ class MediaGoalSyncService {
 
   /// Increments media progress by task units, capped at progressTotal.
   static MediaItem advanceProgress(MediaItem item, double units) {
+    final wasCompleted = item.isCompleted;
     final newCurrent = (item.progressCurrent + units).clamp(0.0, item.progressTotal);
-    return item.copyWith(progressCurrent: newCurrent);
+    final updated = item.copyWith(progressCurrent: newCurrent);
+    if (!wasCompleted && updated.isCompleted) {
+      return updated.copyWith(displayDate: DateTime.now());
+    }
+    return updated;
   }
 
   /// Decrements media progress by task units, floored at 0.0.
   static MediaItem revertProgress(MediaItem item, double units) {
+    final wasCompleted = item.isCompleted;
     final newCurrent = (item.progressCurrent - units).clamp(0.0, item.progressTotal);
-    return item.copyWith(progressCurrent: newCurrent);
+    final updated = item.copyWith(progressCurrent: newCurrent);
+    if (wasCompleted && !updated.isCompleted) {
+      return updated.copyWith(displayDate: DateTime.now());
+    }
+    return updated;
   }
 
   /// Notification message shown upon goal scheduling.

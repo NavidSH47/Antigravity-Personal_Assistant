@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../models/media_item.dart';
 import '../theme/app_theme.dart';
 import 'safe_cover_image.dart';
@@ -42,6 +43,24 @@ class MediaCard extends StatelessWidget {
 
   // --- LIST VIEW CARD (Separated Top & Bottom Layout) ---
   Widget _buildListCard(BuildContext context) {
+    final isDone = item.isCompleted;
+    final Color borderColor;
+    final double borderWidth;
+    if (isDone) {
+      borderColor = const Color(0x8010B981);
+      borderWidth = 1.5;
+    } else if (item.isOnHold) {
+      borderColor = const Color(0x66F59E0B);
+      borderWidth = 1.5;
+    } else {
+      borderColor = palette.borderSubtle;
+      borderWidth = 1.0;
+    }
+
+    final Color cardBg = isDone
+        ? Color.alphaBlend(const Color(0x0F10B981), palette.bgElevated)
+        : palette.bgElevated;
+
     return GestureDetector(
       onLongPress: () {
         HapticFeedback.mediumImpact();
@@ -51,12 +70,10 @@ class MediaCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: palette.bgElevated,
+          color: cardBg,
           border: Border.all(
-            color: item.isOnHold
-                ? const Color(0x66F59E0B)
-                : palette.borderSubtle,
-            width: item.isOnHold ? 1.5 : 1.0,
+            color: borderColor,
+            width: borderWidth,
           ),
           borderRadius: BorderRadius.circular(16),
         ),
@@ -93,13 +110,26 @@ class MediaCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          '${item.releaseYear}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: palette.textDim,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${item.releaseYear}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: palette.textDim,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _formatDisplayDate(item.displayDate),
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: palette.textDim,
+                              ),
+                            ),
+                          ],
                         ),
                         if (onDelete != null) ...[
                           const SizedBox(width: 6),
@@ -211,7 +241,7 @@ class MediaCard extends StatelessWidget {
               child: Text(
                 item.personalNotes != null &&
                         item.personalNotes!.isNotEmpty
-                    ? '📝 "${item.personalNotes}"'
+                    ? '📝 ${item.personalNotes}'
                     : '📝 + Add personal description/notes...',
                 style: TextStyle(
                   fontSize: 11,
@@ -244,78 +274,112 @@ class MediaCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              InkWell(
-                onTap: onScheduleToday,
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
+              if (item.isCompleted)
+                Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    border: Border.all(color: palette.borderSubtle),
+                    color: const Color(0x1A10B981),
+                    border: Border.all(color: const Color(0x6610B981)),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.calendar_today,
+                        Icons.check_circle,
                         size: 11,
-                        color: palette.accentPrimary,
+                        color: Color(0xFF10B981),
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       Text(
-                        'Schedule Today',
+                        'Completed',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: palette.accentPrimary,
+                          color: Color(0xFF10B981),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: () => onToggleOnHold(!item.isOnHold),
+                )
+              else
+                InkWell(
+                  onTap: onScheduleToday,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: palette.borderSubtle),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: Checkbox(
-                            value: item.isOnHold,
-                            onChanged: (val) =>
-                                onToggleOnHold(val ?? false),
-                            activeColor: const Color(0xFFF59E0B),
-                            side: BorderSide(
-                              color: palette.textDim,
-                              width: 1.5,
-                            ),
-                          ),
+                        Icon(
+                          Icons.calendar_today,
+                          size: 11,
+                          color: palette.accentPrimary,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'Hold',
+                          'Schedule Today',
                           style: TextStyle(
-                            fontSize: 11,
-                            color: item.isOnHold
-                                ? const Color(0xFFFBBF24)
-                                : palette.textDim,
-                            fontWeight: item.isOnHold
-                                ? FontWeight.bold
-                                : FontWeight.normal,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: palette.accentPrimary,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!item.isCompleted) ...[
+                    InkWell(
+                      onTap: () => onToggleOnHold(!item.isOnHold),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: Checkbox(
+                              value: item.isOnHold,
+                              onChanged: (val) =>
+                                  onToggleOnHold(val ?? false),
+                              activeColor: const Color(0xFFF59E0B),
+                              side: BorderSide(
+                                color: palette.textDim,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Hold',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: item.isOnHold
+                                  ? const Color(0xFFFBBF24)
+                                  : palette.textDim,
+                              fontWeight: item.isOnHold
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   InkWell(
                     onTap: onUpdateProgress,
                     borderRadius: BorderRadius.circular(6),
@@ -352,6 +416,24 @@ class MediaCard extends StatelessWidget {
 
   // --- GRID VIEW CARD (2-Column Poster-first) ---
   Widget _buildGridCard(BuildContext context) {
+    final isDone = item.isCompleted;
+    final Color borderColor;
+    final double borderWidth;
+    if (isDone) {
+      borderColor = const Color(0x8010B981);
+      borderWidth = 1.5;
+    } else if (item.isOnHold) {
+      borderColor = const Color(0x66F59E0B);
+      borderWidth = 1.5;
+    } else {
+      borderColor = palette.borderSubtle;
+      borderWidth = 1.0;
+    }
+
+    final Color cardBg = isDone
+        ? Color.alphaBlend(const Color(0x0F10B981), palette.bgElevated)
+        : palette.bgElevated;
+
     return GestureDetector(
       onLongPress: () {
         HapticFeedback.mediumImpact();
@@ -359,11 +441,10 @@ class MediaCard extends StatelessWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: palette.bgElevated,
+          color: cardBg,
           border: Border.all(
-            color: item.isOnHold
-                ? const Color(0x66F59E0B)
-                : palette.borderSubtle,
+            color: borderColor,
+            width: borderWidth,
           ),
           borderRadius: BorderRadius.circular(16),
         ),
@@ -408,7 +489,7 @@ class MediaCard extends StatelessWidget {
 
           const SizedBox(height: 8),
 
-          // Title & Year
+          // Title & Year & Date
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -424,9 +505,19 @@ class MediaCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Text(
-                '${item.releaseYear}',
-                style: TextStyle(fontSize: 10, color: palette.textDim),
+              const SizedBox(width: 4),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${item.releaseYear}',
+                    style: TextStyle(fontSize: 10, color: palette.textDim),
+                  ),
+                  Text(
+                    _formatDisplayDate(item.displayDate),
+                    style: TextStyle(fontSize: 9, color: palette.textDim),
+                  ),
+                ],
               ),
             ],
           ),
@@ -447,32 +538,57 @@ class MediaCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              InkWell(
-                onTap: onScheduleToday,
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
+              if (item.isCompleted)
+                Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
-                    border: Border.all(color: palette.borderSubtle),
+                    color: const Color(0x1A10B981),
+                    border: Border.all(color: const Color(0x6610B981)),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.calendar_today, size: 9, color: palette.accentPrimary),
-                      const SizedBox(width: 3),
+                      Icon(Icons.check_circle, size: 9, color: Color(0xFF10B981)),
+                      SizedBox(width: 3),
                       Text(
-                        'Schedule',
+                        'Completed',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
-                          color: palette.accentPrimary,
+                          color: Color(0xFF10B981),
                         ),
                       ),
                     ],
                   ),
+                )
+              else
+                InkWell(
+                  onTap: onScheduleToday,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: palette.borderSubtle),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.calendar_today, size: 9, color: palette.accentPrimary),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Schedule',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: palette.accentPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
               InkWell(
                 onTap: onEditLabels,
                 borderRadius: BorderRadius.circular(6),
@@ -509,19 +625,22 @@ class MediaCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              InkWell(
-                onTap: () => onToggleOnHold(!item.isOnHold),
-                child: Text(
-                  item.isOnHold ? '⏸ On-hold' : '▶ Active',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: item.isOnHold
-                        ? const Color(0xFFFBBF24)
-                        : palette.accentPrimary,
+              if (!item.isCompleted)
+                InkWell(
+                  onTap: () => onToggleOnHold(!item.isOnHold),
+                  child: Text(
+                    item.isOnHold ? '⏸ On-hold' : '▶ Active',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: item.isOnHold
+                          ? const Color(0xFFFBBF24)
+                          : palette.accentPrimary,
+                    ),
                   ),
-                ),
-              ),
+                )
+              else
+                const SizedBox.shrink(),
               InkWell(
                 onTap: onUpdateProgress,
                 child: Text(
@@ -596,6 +715,42 @@ class MediaCard extends StatelessWidget {
               ),
             ),
           ),
+
+          // 100% Completed "Done" Badge on Cover
+          if (item.isCompleted)
+            Positioned(
+              top: 4,
+              left: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xD9059669),
+                  borderRadius: BorderRadius.circular(4),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x40000000),
+                      blurRadius: 3,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check, size: 9, color: Colors.white),
+                    SizedBox(width: 2),
+                    Text(
+                      'Done',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -656,7 +811,7 @@ class MediaCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: palette.textMain,
+                color: item.isCompleted ? const Color(0xFF10B981) : palette.textMain,
               ),
             ),
           ],
@@ -673,7 +828,11 @@ class MediaCard extends StatelessWidget {
             widthFactor: item.progressRatio,
             child: Container(
               decoration: BoxDecoration(
-                gradient: palette.accentGradient,
+                gradient: item.isCompleted
+                    ? const LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF34D399)],
+                      )
+                    : palette.accentGradient,
                 borderRadius: BorderRadius.circular(3),
               ),
             ),
@@ -724,5 +883,9 @@ class MediaCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatDisplayDate(DateTime date) {
+    return DateFormat('MMM d, yyyy').format(date);
   }
 }

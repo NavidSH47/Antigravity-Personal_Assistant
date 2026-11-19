@@ -7,6 +7,8 @@ class SettingsDrawer extends StatelessWidget {
   final VibePalette palette;
   final Function(ThemeVibe) onSelectVibe;
   final Function(AppFontStyle) onSelectFont;
+  final double fontSizeScale;
+  final Function(double) onFontSizeScaleChanged;
 
   const SettingsDrawer({
     super.key,
@@ -15,6 +17,8 @@ class SettingsDrawer extends StatelessWidget {
     required this.palette,
     required this.onSelectVibe,
     required this.onSelectFont,
+    this.fontSizeScale = 1.0,
+    required this.onFontSizeScaleChanged,
   });
 
   @override
@@ -30,18 +34,23 @@ class SettingsDrawer extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const Text('⚙️ ', style: TextStyle(fontSize: 16)),
-                      Text(
-                        'Appearance & Settings',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: palette.textMain,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Text('⚙️ ', style: TextStyle(fontSize: 16)),
+                        Expanded(
+                          child: Text(
+                            'Appearance & Settings',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: palette.textMain,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: Icon(Icons.close, color: palette.textMuted, size: 20),
@@ -61,21 +70,28 @@ class SettingsDrawer extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'COLOR VIBE THEMES',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: palette.textDim,
-                          letterSpacing: 0.6,
+                      Flexible(
+                        child: Text(
+                          'COLOR VIBE THEMES',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: palette.textDim,
+                            letterSpacing: 0.6,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        AppTheme.vibes[currentVibe]!.label,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: palette.accentPrimary,
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          AppTheme.vibes[currentVibe]!.label,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: palette.accentPrimary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -246,6 +262,64 @@ class SettingsDrawer extends StatelessWidget {
                         ),
                       );
                     },
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // --- GLOBAL FONT SIZE SCALING ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'FONT SIZE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: palette.textDim,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      Text(
+                        'Aa — ${(fontSizeScale * 100).round()}%',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: palette.accentPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: palette.accentPrimary,
+                      inactiveTrackColor: palette.borderSubtle,
+                      thumbColor: palette.accentPrimary,
+                      overlayColor: palette.accentPrimary.withValues(alpha: 0.2),
+                      valueIndicatorColor: palette.bgSurface,
+                      valueIndicatorTextStyle: TextStyle(color: palette.textMain),
+                    ),
+                    child: Slider(
+                      value: fontSizeScale.clamp(0.8, 1.4),
+                      min: 0.8,
+                      max: 1.4,
+                      divisions: 6,
+                      onChanged: (val) {
+                        onFontSizeScaleChanged(double.parse(val.toStringAsFixed(1)));
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text('Compact\n(80%)', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: palette.textMuted))),
+                        Expanded(child: Text('Default\n(100%)', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: palette.textMuted))),
+                        Expanded(child: Text('Large\n(120%)', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: palette.textMuted))),
+                        Expanded(child: Text('Extra Large\n(140%)', textAlign: TextAlign.center, style: TextStyle(fontSize: 9, color: palette.textMuted))),
+                      ],
+                    ),
                   ),
                 ],
               ),
