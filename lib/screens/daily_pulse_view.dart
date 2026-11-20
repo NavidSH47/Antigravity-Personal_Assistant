@@ -499,7 +499,6 @@ class DailyPulseView extends StatelessWidget {
                 id: 'focus',
                 label: 'Focus',
                 icon: Icons.push_pin_rounded,
-                weight: dailyActiveTasks.isNotEmpty ? dailyActiveTasks.length.toDouble() : 1.0,
                 onTap: () {
                   scrollController.animateTo(
                     0.0,
@@ -512,7 +511,6 @@ class DailyPulseView extends StatelessWidget {
                 id: 'orbit',
                 label: 'Orbit',
                 icon: Icons.public_rounded,
-                weight: backlogActiveTasks.isNotEmpty ? backlogActiveTasks.length.toDouble() : 1.0,
                 onTap: () {
                   if (isBacklogCollapsed) {
                     onToggleBacklogCollapsed();

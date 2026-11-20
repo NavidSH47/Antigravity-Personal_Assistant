@@ -600,25 +600,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  List<({MediaType type, List<MediaItem> items})> _partitionMediaByType(List<MediaItem> items) {
-    if (items.isEmpty) return const [];
-    if (_mediaFilter != 'all') {
-      final copy = List<MediaItem>.from(items);
-      _sortMediaBySelectedSorter(copy);
-      return [(type: copy.first.type, items: copy)];
-    }
-
-    final result = <({MediaType type, List<MediaItem> items})>[];
-    for (final t in MediaType.values) {
-      final matching = items.where((m) => m.type == t).toList();
-      if (matching.isNotEmpty) {
-        _sortMediaBySelectedSorter(matching);
-        result.add((type: t, items: matching));
-      }
-    }
-    return result;
-  }
-
   List<MediaItem> get _filteredMediaItems {
     var list = _mediaItems.where((m) {
       if (_mediaFilter == 'all') return true;
@@ -635,15 +616,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final onHold = list.where((m) => !m.isCompleted && m.isOnHold).toList();
     final finished = list.where((m) => m.isCompleted).toList();
 
-    List<MediaItem> flattenGroups(List<MediaItem> source) {
-      final groups = _partitionMediaByType(source);
-      return [for (final g in groups) ...g.items];
+    List<MediaItem> sortItems(List<MediaItem> source) {
+      final copy = List<MediaItem>.from(source);
+      _sortMediaBySelectedSorter(copy);
+      return copy;
     }
 
     return [
-      ...flattenGroups(uncompleted),
-      ...flattenGroups(onHold),
-      ...flattenGroups(finished),
+      ...sortItems(uncompleted),
+      ...sortItems(onHold),
+      ...sortItems(finished),
     ];
   }
 

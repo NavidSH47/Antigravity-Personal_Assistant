@@ -53,46 +53,6 @@ class EntertainmentView extends StatelessWidget {
     required this.onDeleteMedia,
   });
 
-  void _sortMediaBySelectedSorter(List<MediaItem> list) {
-    switch (mediaSort) {
-      case 'score':
-        list.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
-        break;
-      case 'progress':
-        list.sort((a, b) => b.progressRatio.compareTo(a.progressRatio));
-        break;
-      case 'year':
-        list.sort((a, b) => b.releaseYear.compareTo(a.releaseYear));
-        break;
-      case 'name':
-        list.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-        break;
-      case 'custom':
-      default:
-        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        break;
-    }
-  }
-
-  List<({MediaType type, List<MediaItem> items})> _partitionMediaByType(List<MediaItem> items) {
-    if (items.isEmpty) return const [];
-    if (mediaFilter != 'all') {
-      final copy = List<MediaItem>.from(items);
-      _sortMediaBySelectedSorter(copy);
-      return [(type: copy.first.type, items: copy)];
-    }
-
-    final result = <({MediaType type, List<MediaItem> items})>[];
-    for (final t in MediaType.values) {
-      final matching = items.where((m) => m.type == t).toList();
-      if (matching.isNotEmpty) {
-        _sortMediaBySelectedSorter(matching);
-        result.add((type: t, items: matching));
-      }
-    }
-    return result;
-  }
-
   Widget _buildMediaCard(MediaItem item, {required bool isGrid}) {
     return MediaCard(
       key: ValueKey(item.id),
@@ -185,16 +145,6 @@ class EntertainmentView extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildMediaGroupWidgets(
-    List<({MediaType type, List<MediaItem> items})> groups,
-  ) {
-    final widgets = <Widget>[];
-    for (final g in groups) {
-      widgets.add(_buildMediaChunk(g.items));
-    }
-    return widgets;
-  }
-
   Widget _buildCategoryPill(String filterKey, String label) {
     final isActive = mediaFilter == filterKey;
     return InkWell(
@@ -228,10 +178,6 @@ class EntertainmentView extends StatelessWidget {
     final onHoldItems =
         mediaList.where((m) => !m.isCompleted && m.isOnHold).toList();
     final finishedItems = mediaList.where((m) => m.isCompleted).toList();
-
-    final uncompletedGroups = _partitionMediaByType(uncompletedItems);
-    final onHoldGroups = _partitionMediaByType(onHoldItems);
-    final finishedGroups = _partitionMediaByType(finishedItems);
 
     return Stack(
       children: [
@@ -405,34 +351,34 @@ class EntertainmentView extends StatelessWidget {
               )
             else ...[
               // Uncompleted Section
-              if (uncompletedGroups.isNotEmpty) ...[
+              if (uncompletedItems.isNotEmpty) ...[
                 KeyedSubtree(
                   key: activeMediaKey,
                   child: const SizedBox.shrink(),
                 ),
-                ..._buildMediaGroupWidgets(uncompletedGroups),
+                _buildMediaChunk(uncompletedItems),
               ],
 
               // On-Hold Section
-              if (onHoldGroups.isNotEmpty) ...[
+              if (onHoldItems.isNotEmpty) ...[
                 _buildSectionDivider(
                   key: onHoldMediaKey,
                   title: 'On-Hold',
                   icon: Icons.pause_circle_outline,
                   count: onHoldItems.length,
                 ),
-                ..._buildMediaGroupWidgets(onHoldGroups),
+                _buildMediaChunk(onHoldItems),
               ],
 
               // Finished Section
-              if (finishedGroups.isNotEmpty) ...[
+              if (finishedItems.isNotEmpty) ...[
                 _buildSectionDivider(
                   key: finishedMediaKey,
                   title: 'Finished',
                   icon: Icons.check_circle_outline,
                   count: finishedItems.length,
                 ),
-                ..._buildMediaGroupWidgets(finishedGroups),
+                _buildMediaChunk(finishedItems),
               ],
             ],
           ],
@@ -450,9 +396,6 @@ class EntertainmentView extends StatelessWidget {
                 label: 'Active',
                 icon: Icons.play_arrow_rounded,
                 isEnabled: uncompletedItems.isNotEmpty,
-                weight: uncompletedItems.isNotEmpty
-                    ? uncompletedItems.length.toDouble()
-                    : 0.0,
                 onTap: () {
                   scrollController.animateTo(
                     0.0,
@@ -466,9 +409,6 @@ class EntertainmentView extends StatelessWidget {
                 label: 'Hold',
                 icon: Icons.pause_rounded,
                 isEnabled: onHoldItems.isNotEmpty,
-                weight: onHoldItems.isNotEmpty
-                    ? onHoldItems.length.toDouble()
-                    : 0.0,
                 onTap: () {
                   if (onHoldMediaKey.currentContext != null) {
                     Scrollable.ensureVisible(
@@ -485,9 +425,6 @@ class EntertainmentView extends StatelessWidget {
                 label: 'Done',
                 icon: Icons.check_circle_outline_rounded,
                 isEnabled: finishedItems.isNotEmpty,
-                weight: finishedItems.isNotEmpty
-                    ? finishedItems.length.toDouble()
-                    : 0.0,
                 onTap: () {
                   if (finishedMediaKey.currentContext != null) {
                     Scrollable.ensureVisible(
