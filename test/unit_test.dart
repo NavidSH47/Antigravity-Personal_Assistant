@@ -28,6 +28,7 @@ import 'package:nsh_assistant/services/media_info_fetch_service.dart';
 import 'package:nsh_assistant/services/storage_service.dart';
 import 'package:nsh_assistant/widgets/settings_drawer.dart';
 import 'package:nsh_assistant/widgets/fast_scroll_rail.dart';
+import 'package:nsh_assistant/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -2392,7 +2393,7 @@ void main() {
       });
     });
 
-    group('25. Version 2.6.0 Feature Verification Suite', () {
+    group('25. Version 2.6.0 & 2.6.1 Feature Verification Suite', () {
       test('1. Canceled tasks do not count in daily total (0/1 becomes 0/0 Done)', () {
         final task1 = Task(id: '1', title: 'Task 1', status: TaskStatus.canceled, category: TaskCategory.daily);
         final daily = [task1];
@@ -2466,10 +2467,9 @@ void main() {
         expect(info.runtimeMinutes, 148);
       });
 
-      testWidgets('4. FastScrollRail renders quick-jump sections and triggers callbacks', (tester) async {
+      testWidgets('4. FastScrollRail renders minimal rail and accepts section definitions', (tester) async {
         final controller = ScrollController();
         final palette = AppTheme.vibes[ThemeVibe.deepAmethyst]!;
-        bool activeTapped = false;
         bool holdTapped = false;
         bool doneTapped = false;
 
@@ -2479,7 +2479,7 @@ void main() {
               controller: controller,
               palette: palette,
               sections: [
-                FastScrollSection(id: 'active', label: 'Active', icon: Icons.play_arrow, onTap: () => activeTapped = true),
+                FastScrollSection(id: 'active', label: 'Active', icon: Icons.play_arrow, onTap: () {}),
                 FastScrollSection(id: 'onHold', label: 'Hold', icon: Icons.pause, onTap: () => holdTapped = true),
                 FastScrollSection(id: 'finished', label: 'Done', icon: Icons.check, onTap: () => doneTapped = true),
               ],
@@ -2487,16 +2487,50 @@ void main() {
           ),
         ));
 
+        // Minimal rail — no icon buttons rendered; only the GestureDetector + FadeTransition structure
         expect(find.byType(FastScrollRail), findsOneWidget);
-        expect(find.byIcon(Icons.play_arrow), findsOneWidget);
-        expect(find.byIcon(Icons.pause), findsOneWidget);
-        expect(find.byIcon(Icons.check), findsOneWidget);
+        expect(find.descendant(of: find.byType(FastScrollRail), matching: find.byType(GestureDetector)), findsOneWidget);
+        expect(find.descendant(of: find.byType(FastScrollRail), matching: find.byType(FadeTransition)), findsOneWidget);
+        // No icon buttons visible in the new minimal design
+        expect(find.byIcon(Icons.play_arrow), findsNothing);
+        expect(find.byIcon(Icons.pause), findsNothing);
+        expect(find.byIcon(Icons.check), findsNothing);
+        // Suppress unused variable warnings
+        expect(holdTapped, isFalse);
+        expect(doneTapped, isFalse);
+      });
 
-        await tester.tap(find.byIcon(Icons.pause));
-        expect(holdTapped, isTrue);
+      testWidgets('5. HomeScreen mounts without error on launch and tab switch', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final storage = await StorageService.init();
 
-        await tester.tap(find.byIcon(Icons.check));
-        expect(doneTapped, isTrue);
+        await tester.pumpWidget(MaterialApp(
+          home: HomeScreen(
+            storage: storage,
+            currentVibe: ThemeVibe.deepAmethyst,
+            currentFont: AppFontStyle.defaultSans,
+            fontSizeScale: 1.0,
+            onSelectVibe: (_) {},
+            onSelectFont: (_) {},
+            onSelectFontSizeScale: (_) {},
+          ),
+        ));
+        await tester.pumpAndSettle();
+
+        // Check that Daily Pulse view is visible and no errors
+        expect(find.text('📝 Daily Pulse'), findsOneWidget);
+        expect(find.text('🎬 Entertainment'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        // Switch to entertainment
+        await tester.tap(find.text('🎬 Entertainment'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // Switch back to daily pulse
+        await tester.tap(find.text('📝 Daily Pulse'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
       });
     });
   });

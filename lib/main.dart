@@ -3569,32 +3569,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Stack(
       children: [
-        Positioned.fill(
-          child: Listener(
-            onPointerMove: (e) => _lastPointerY = e.position.dy,
-            onPointerUp: (_) => _stopAutoScrollTimer(),
-            onPointerCancel: (_) => _stopAutoScrollTimer(),
-            child: ListView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
-              children: [
-                ShamsiAgendaBanner(
-                  events: _events,
-                  palette: _palette,
-                  selectedDate: _selectedDate,
-                  onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
-                  onToggleCheckpoint: _toggleShamsiCheckpoint,
-                  onAddEvent: _addShamsiEvent,
-                  onAddCustomEvent: _showAddCustomEventDialog,
-                  onRemoveEvent: _removeShamsiEvent,
-                  taskCompletionMap: taskCompletionMap,
-                ),
-                const SizedBox(height: 18),
+        Listener(
+          onPointerMove: (e) => _lastPointerY = e.position.dy,
+          onPointerUp: (_) => _stopAutoScrollTimer(),
+          onPointerCancel: (_) => _stopAutoScrollTimer(),
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
+            children: [
+              ShamsiAgendaBanner(
+                events: _events,
+                palette: _palette,
+                selectedDate: _selectedDate,
+                onDateChanged: (newDate) => setState(() => _selectedDate = newDate),
+                onToggleCheckpoint: _toggleShamsiCheckpoint,
+                onAddEvent: _addShamsiEvent,
+                onAddCustomEvent: _showAddCustomEventDialog,
+                onRemoveEvent: _removeShamsiEvent,
+                taskCompletionMap: taskCompletionMap,
+              ),
+              const SizedBox(height: 18),
 
-                // --- TODAY'S FOCUS SECTION ---
-                Column(
-                  key: _focusSectionKey,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              // --- TODAY'S FOCUS SECTION ---
+              Column(
+                key: _focusSectionKey,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3971,50 +3970,51 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     ),
   ),
-),
-Positioned(
-  top: 12,
-  bottom: 12,
-  right: 3,
-  child: FastScrollRail(
-    controller: _scrollController,
-    palette: _palette,
-    sections: [
-      FastScrollSection(
-        id: 'focus',
-        label: 'Focus',
-        icon: Icons.push_pin_rounded,
-        onTap: () {
-          _scrollController.animateTo(
-            0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutCubic,
-          );
-        },
-      ),
-      FastScrollSection(
-        id: 'orbit',
-        label: 'Orbit',
-        icon: Icons.public_rounded,
-        onTap: () {
-          if (_isBacklogCollapsed) {
-            setState(() => _isBacklogCollapsed = false);
-          }
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_backlogSectionKey.currentContext != null) {
-              Scrollable.ensureVisible(
-                _backlogSectionKey.currentContext!,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
-                alignment: 0.05,
-              );
+  Positioned(
+    top: 0,
+    bottom: 0,
+    right: 0,
+    child: FastScrollRail(
+      controller: _scrollController,
+      palette: _palette,
+      sections: [
+        FastScrollSection(
+          id: 'focus',
+          label: 'Focus',
+          icon: Icons.push_pin_rounded,
+          weight: dailyActiveTasks.isNotEmpty ? dailyActiveTasks.length.toDouble() : 1.0,
+          onTap: () {
+            _scrollController.animateTo(
+              0.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+            );
+          },
+        ),
+        FastScrollSection(
+          id: 'orbit',
+          label: 'Orbit',
+          icon: Icons.public_rounded,
+          weight: backlogActiveTasks.isNotEmpty ? backlogActiveTasks.length.toDouble() : 1.0,
+          onTap: () {
+            if (_isBacklogCollapsed) {
+              setState(() => _isBacklogCollapsed = false);
             }
-          });
-        },
-      ),
-    ],
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (_backlogSectionKey.currentContext != null) {
+                Scrollable.ensureVisible(
+                  _backlogSectionKey.currentContext!,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  alignment: 0.05,
+                );
+              }
+            });
+          },
+        ),
+      ],
+    ),
   ),
-),
 ],
 );
 }
@@ -4111,65 +4111,12 @@ Positioned(
     );
   }
 
-  Widget _buildTypeDivider(MediaType type, int count) {
-    final emoji = switch (type) {
-      MediaType.book => '📚',
-      MediaType.tvShow => '📺',
-      MediaType.movie => '🎬',
-      MediaType.videoGame => '🎮',
-    };
-    final name = switch (type) {
-      MediaType.book => 'Books',
-      MediaType.tvShow => 'TV Shows',
-      MediaType.movie => 'Movies',
-      MediaType.videoGame => 'Video Games',
-    };
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Text(
-            '$emoji $name',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: _palette.textMuted,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: _palette.bgElevated,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _palette.borderSubtle),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(fontSize: 9, color: _palette.textDim),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Divider(
-              color: _palette.borderSubtle.withValues(alpha: 0.7),
-              thickness: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   List<Widget> _buildMediaGroupWidgets(
     List<({MediaType type, List<MediaItem> items})> groups,
   ) {
     final widgets = <Widget>[];
-    for (int i = 0; i < groups.length; i++) {
-      final g = groups[i];
-      if (i > 0) {
-        widgets.add(_buildTypeDivider(g.type, g.items.length));
-      }
+    for (final g in groups) {
       widgets.add(_buildMediaChunk(g.items));
     }
     return widgets;
@@ -4190,10 +4137,9 @@ Positioned(
 
     return Stack(
       children: [
-        Positioned.fill(
-          child: ListView(
-            controller: _entertainmentScrollController,
-            padding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
+        ListView(
+          controller: _entertainmentScrollController,
+          padding: const EdgeInsets.fromLTRB(16, 16, 20, 16),
             children: [
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -4400,11 +4346,10 @@ Positioned(
               ],
             ],
           ),
-        ),
         Positioned(
-          top: 12,
-          bottom: 12,
-          right: 3,
+          top: 0,
+          bottom: 0,
+          right: 0,
           child: FastScrollRail(
             controller: _entertainmentScrollController,
             palette: _palette,
@@ -4414,6 +4359,9 @@ Positioned(
                 label: 'Active',
                 icon: Icons.play_arrow_rounded,
                 isEnabled: uncompletedItems.isNotEmpty,
+                weight: uncompletedItems.isNotEmpty
+                    ? uncompletedItems.length.toDouble()
+                    : 0.0,
                 onTap: () {
                   _entertainmentScrollController.animateTo(
                     0.0,
@@ -4427,6 +4375,9 @@ Positioned(
                 label: 'Hold',
                 icon: Icons.pause_rounded,
                 isEnabled: onHoldItems.isNotEmpty,
+                weight: onHoldItems.isNotEmpty
+                    ? onHoldItems.length.toDouble()
+                    : 0.0,
                 onTap: () {
                   if (_onHoldMediaKey.currentContext != null) {
                     Scrollable.ensureVisible(
@@ -4443,6 +4394,9 @@ Positioned(
                 label: 'Done',
                 icon: Icons.check_circle_outline_rounded,
                 isEnabled: finishedItems.isNotEmpty,
+                weight: finishedItems.isNotEmpty
+                    ? finishedItems.length.toDouble()
+                    : 0.0,
                 onTap: () {
                   if (_finishedMediaKey.currentContext != null) {
                     Scrollable.ensureVisible(
