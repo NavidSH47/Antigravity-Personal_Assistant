@@ -39,7 +39,7 @@ Developed with Flutter (Android, Web, Windows).
 
 ## Repository & Documentation
 - Detailed architectural specs and data models: see [`SDD.md`](./SDD.md).
-- Interactive prototype preview: `prototype.html`.
+- Interactive prototype preview: `docs/prototype.html`.
 Automated test suite: flutter test.
 
 ### Running the app in Chrome (desktop)
