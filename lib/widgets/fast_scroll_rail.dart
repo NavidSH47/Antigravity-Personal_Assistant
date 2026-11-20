@@ -8,7 +8,6 @@ class FastScrollSection {
   final IconData icon;
   final VoidCallback onTap;
   final bool isEnabled;
-  final double weight;
 
   const FastScrollSection({
     required this.id,
@@ -16,7 +15,6 @@ class FastScrollSection {
     required this.icon,
     required this.onTap,
     this.isEnabled = true,
-    this.weight = 1.0,
   });
 }
 
@@ -45,8 +43,6 @@ class _FastScrollRailState extends State<FastScrollRail>
   // Drag state
   bool _isDragging = false;
   double _dragFraction = 0.0;
-  String? _bubbleLabel;
-  double? _dragMaxExtent;
 
   // Animation
   late AnimationController _fadeController;
@@ -117,106 +113,37 @@ class _FastScrollRailState extends State<FastScrollRail>
     }
   }
 
-  String? _resolveSectionLabel(double fraction) {
-    final activeSections = widget.sections
-        .where((s) => s.isEnabled && s.weight > 0)
-        .toList();
-
-    if (activeSections.isEmpty) return null;
-    if (activeSections.length == 1) return activeSections.first.label;
-
-    final totalWeight =
-        activeSections.fold<double>(0.0, (sum, s) => sum + s.weight);
-    if (totalWeight <= 0) return null;
-
-    final ranges = <({double start, double end, String label})>[];
-    double accumulated = 0.0;
-    for (int i = 0; i < activeSections.length; i++) {
-      final s = activeSections[i];
-      final start = accumulated;
-      final end = (i == activeSections.length - 1)
-          ? 1.0
-          : (accumulated + (s.weight / totalWeight));
-      ranges.add((start: start, end: end, label: s.label));
-      accumulated = end;
-    }
-
-    // Apply hysteresis with current label to prevent boundary oscillation/flicker
-    const hysteresis = 0.025; // 2.5% deadband
-    if (_bubbleLabel != null) {
-      final currentIdx = ranges.indexWhere((r) => r.label == _bubbleLabel);
-      if (currentIdx != -1) {
-        final currentRange = ranges[currentIdx];
-        final effectiveStart = (currentIdx == 0)
-            ? 0.0
-            : (currentRange.start - hysteresis);
-        final effectiveEnd = (currentIdx == ranges.length - 1)
-            ? 1.0
-            : (currentRange.end + hysteresis);
-
-        if (fraction >= effectiveStart && fraction <= effectiveEnd) {
-          return currentRange.label;
-        }
-      }
-    }
-
-    for (final r in ranges) {
-      if (fraction >= r.start && fraction <= r.end) {
-        return r.label;
-      }
-    }
-    return ranges.last.label;
-  }
-
   void _handleDragUpdate(double localY, double totalHeight) {
     if (!widget.controller.hasClients || totalHeight <= _thumbHeight) return;
     try {
       final position = widget.controller.position;
       if (!position.hasContentDimensions) return;
-
-      final currentMax = position.maxScrollExtent;
-      if (_dragMaxExtent == null || currentMax > _dragMaxExtent!) {
-        _dragMaxExtent = currentMax;
-      }
-      final max = _dragMaxExtent!;
-
+      final max = position.maxScrollExtent;
       final fraction =
           ((localY - _thumbHeight / 2) / (totalHeight - _thumbHeight))
               .clamp(0.0, 1.0);
 
       if (max > 0) {
-        widget.controller.jumpTo((fraction * max).clamp(0.0, currentMax));
+        widget.controller.jumpTo(fraction * max);
       }
-
-      final label = _resolveSectionLabel(fraction);
 
       setState(() {
         _isDragging = true;
         _dragFraction = fraction;
-        _bubbleLabel = label;
       });
     } catch (_) {}
   }
 
   void _startDrag(double localY, double totalHeight) {
     _hideTimer?.cancel();
-    if (!_isVisible) {
-      setState(() => _isVisible = true);
-      _fadeController.forward();
-    }
-    if (widget.controller.hasClients &&
-        widget.controller.position.hasContentDimensions) {
-      _dragMaxExtent = widget.controller.position.maxScrollExtent;
-    }
+    _showRail();
     _handleDragUpdate(localY, totalHeight);
   }
 
   void _endDrag() {
     if (!mounted) return;
-    _dragMaxExtent = null;
     setState(() {
       _isDragging = false;
-      _bubbleLabel = null;
     });
     _showRail(); // restart the hide timer
   }
@@ -284,41 +211,6 @@ class _FastScrollRailState extends State<FastScrollRail>
                   ),
                 ),
               ),
-
-              // Bubble label — only shown while dragging
-              if (_isDragging && _bubbleLabel != null)
-                Positioned(
-                  top: (thumbTop + _thumbHeight / 2 - 14).clamp(
-                      0.0, totalHeight - 28.0),
-                  right: _railWidth + 6,
-                  child: Material(
-                    elevation: 4,
-                    color: Colors.transparent,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: widget.palette.accentPrimary,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: widget.palette.accentPrimary
-                                .withValues(alpha: 0.3),
-                            blurRadius: 6,
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        _bubbleLabel!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
